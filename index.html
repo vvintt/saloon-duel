@@ -127,6 +127,15 @@
   .btn:hover { transform: translateY(-1px); box-shadow: 0 5px 0 var(--rust); }
   .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--rust); }
   .btn:focus-visible { outline: 3px solid var(--rust); outline-offset: 3px; }
+  .rotate-tip {
+    position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+    display: none; text-align: center;
+    font-family: var(--display); font-size: 16px;
+    padding: 10px 12px; border-radius: 6px;
+    background: rgba(30,19,12,.82); color: var(--paper);
+    pointer-events: none;
+  }
+  @media (orientation: portrait) and (pointer: coarse) { .rotate-tip { display: block; } }
   @media (prefers-reduced-motion: reduce) { .poster { transform: none; } }
 </style>
 
@@ -155,6 +164,7 @@
   <span class="hint" id="hint">R / пробел / ПКМ — перезарядка</span>
 </div>
 <button class="reload-btn" id="reloadBtn" type="button">Перезарядка</button>
+<div class="rotate-tip">Поверни телефон горизонтально, так улица будет крупнее</div>
 
 <div class="overlay" id="startScreen">
   <div class="poster">
