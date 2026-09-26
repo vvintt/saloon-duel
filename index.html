@@ -219,10 +219,10 @@
       <li><b>Клик</b><span>выстрел, в барабане 6 патронов</span></li>
       <li><b>R, пробел, ПКМ</b><span>перезарядка</span></li>
       <li><b>В голову</b><span>больше денег, серия умножает до ×5</span></li>
-      <li><b>Верзила</b><span>с бородой, в корпус держит две пули</span></li>
-      <li><b>Стрелок</b><span>в чёрном плаще, стреляет быстрее</span></li>
+      <li><b>Бандит</b><span>в красном платке, $100 / $250 в голову</span></li>
+      <li><b>Меткая Энни</b><span>стреляет быстрее, $150 / $350</span></li>
       <li><b>Бутылки</b><span>на коновязях, +$50 за каждую</span></li>
-      <li><b>Дама, бармен</b><span>мирные. Попадёшь — минус жизнь</span></li>
+      <li><b>Шериф</b><span>с поднятыми руками — свой. Попадёшь — минус жизнь</span></li>
     </ul>
     <div class="quality" id="quality" role="group" aria-label="Качество графики">
       <span>Графика</span>
@@ -248,6 +248,7 @@
   </div>
 </div>
 
+<script src="assets/cutouts.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -1196,7 +1197,11 @@ const VARIANTS = {
   kid:        { pts: [100, 250], fuse: 0.95, hp: 1, scale: 1.12, label: '' },
   lady:       { scale: 1.18 },
   barkeep:    { scale: 1.2 },
+  outlaw:     { pts: [100, 250], fuse: 1.0, hp: 1, scale: 1, label: '', cut: 'bandit' },
+  annie:      { pts: [150, 350], fuse: 0.8, hp: 1, scale: 0.97, label: 'Меткая Энни: ', cut: 'cowgirl' },
+  sheriff:    { scale: 1, cut: 'sheriff' },
 };
+const INNOCENT = new Set(['lady', 'barkeep', 'sheriff']);
 function buildCharacterRaw(kind) {
   const g = new T.Group();
   const skinTone = pick([0xd9a57a, 0xc68d63, 0xe2b893, 0xa8724d, 0x8c5a3c]);
@@ -1328,8 +1333,54 @@ function mergeLocal(group) {
   rm.forEach(c => group.remove(c));
   buckets.forEach(b => group.add(new T.Mesh(mergeGeometries(b.geos), b.mat)));
 }
+// ---------- painted cut-out characters (parts from assets/cutouts.js) ----------
+const CUT = {};
+await Promise.all(Object.entries(window.CUTOUTS || {}).map(async ([name, c]) => {
+  const parts = {};
+  await Promise.all(Object.entries(c.parts).map(async ([k, p]) => {
+    const img = new Image(); img.src = p.src; await img.decode();
+    const tex = new T.Texture(img); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = maxAniso; tex.needsUpdate = true;
+    const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
+    const cg = cv.getContext('2d'); cg.drawImage(img, 0, 0);
+    const d = cg.getImageData(0, 0, img.width, img.height).data, a = new Uint8Array(img.width * img.height);
+    for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3];
+    const mat = new T.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: T.DoubleSide, roughness: 0.85, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.3 });
+    parts[k] = Object.assign({}, p, { mat, mask: { a, w: img.width, h: img.height } });
+  }));
+  CUT[name] = Object.assign({}, c, { parts });
+}));
+function buildCutout(name, H = 2.3) {
+  const c = CUT[name], k = H / c.height;
+  const g = new T.Group();
+  const loc = (x, y) => new T.Vector2((x - c.cx) * k, (c.bottom - y) * k);
+  const plane = (p, parent, ox, oy, part) => {
+    const [x0, y0, x1, y1] = p.box, w = (x1 - x0) * k, h = (y1 - y0) * k, ctr = loc((x0 + x1) / 2, (y0 + y1) / 2);
+    const m = new T.Mesh(new T.PlaneGeometry(w, h), p.mat);
+    m.position.set(ctr.x - ox, ctr.y - oy, 0);
+    m.userData.part = part; m.userData.hitbox = true; m.userData.mask = p.mask;
+    parent.add(m); return m;
+  };
+  plane(c.parts.body, g, 0, 0, 'body');
+  const nk = loc(c.neck[0], c.neck[1]);
+  const head = new T.Group(); head.position.set(nk.x, nk.y, 0.004); g.add(head);
+  plane(c.parts.head, head, nk.x, nk.y, 'head');
+  const arm = (key, part, z) => {
+    const p = c.parts[key], pv = loc(p.pivot[0], p.pivot[1]);
+    const sh = new T.Group(); sh.position.set(pv.x, pv.y, z); g.add(sh);
+    plane(p, sh, pv.x, pv.y, part);
+    return { sh, el: new T.Group(), pivot: pv };
+  };
+  const rightArm = arm('gun', 'armR', 0.012), leftArm = arm('free', 'armL', 0.008);
+  const muzzle = new T.Object3D(); const mz = loc(c.muzzle[0], c.muzzle[1]);
+  muzzle.position.set(mz.x - rightArm.pivot.x, mz.y - rightArm.pivot.y, 0.03); rightArm.sh.add(muzzle);
+  const bang = new T.Sprite(new T.SpriteMaterial({ map: bangTex, depthTest: false, transparent: true }));
+  bang.scale.set(0.42, 0.42, 1); bang.position.set(0, H + 0.2, 0); bang.visible = false; bang.renderOrder = 5; g.add(bang);
+  return { group: g, rightArm, leftArm, hat: null, muzzle, head, bang, extra: { cutout: true, neckY: nk.y } };
+}
+
 // Characters: fewer draw calls, no shadows, and generous invisible hitboxes for aiming.
 function buildCharacter(kind) {
+  if (VARIANTS[kind] && VARIANTS[kind].cut) return buildCutout(VARIANTS[kind].cut);
   const c = buildCharacterRaw(kind);
   const g = c.group;
   mergeLocal(g); mergeLocal(c.head);
@@ -1562,7 +1613,7 @@ function explodeHead(e, dir) {
     flying.push({ o: hat, v: new T.Vector3(rand(-1, 1), rand(3, 5), 0).addScaledVector(dir, 2), w: new T.Vector3(rand(-8, 8), rand(-4, 4), rand(-8, 8)), t: 0 });
   }
   c.head.visible = false;
-  stumpDisk(c.group, 0, 1.55, 0, -Math.PI / 2);
+  if (!c.extra.cutout) stumpDisk(c.group, 0, 1.55, 0, -Math.PI / 2);
   emitBlood(hp, dir, 130, 8, 0.9, 1.5);
   emitBlood(hp, _up, 50, 4.5, 1.3, 1.1);
   emitBlood(hp, dir.clone().negate(), 15, 2.5, 0.8, 0.8);
@@ -1574,13 +1625,14 @@ function detachArm(e, arm, dir) {
   if (!arm || arm.gone) return;
   arm.gone = true;
   const wp = new T.Vector3(); arm.sh.getWorldPosition(wp);
+  const shLocal = arm.sh.position.clone();
   scene.attach(arm.sh);
   throwGib(arm.sh, dir.clone().multiplyScalar(rand(2, 3.5)).add(new T.Vector3(rand(-1.5, 1.5), rand(2.5, 4), rand(-0.5, 0.5))), new T.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9)), 1.6);
   gibs[gibs.length - 1].r = 0.12;
-  stumpDisk(e.c.group, arm === e.c.leftArm ? -0.3 : 0.3, 1.38, 0, Math.PI / 2);
+  if (!e.c.extra.cutout) stumpDisk(e.c.group, shLocal.x, shLocal.y, 0, Math.PI / 2);
   emitBlood(wp, dir, 45, 5, 0.8, 1.2);
   for (let i = 0; i < 4; i++) chunk(wp, i % 2 ? boneMat : fleshMat, dir, rand(1.5, 3));
-  e.shoulders = (e.shoulders || []).concat([{ side: arm === e.c.leftArm ? -0.3 : 0.3, t: 1.2 }]);
+  e.shoulders = (e.shoulders || []).concat([{ side: shLocal.x, y: shLocal.y, t: 1.2 }]);
 }
 function gore(e, part, point, dir) {
   spawnSprite(puffTex, point, { size: 0.4, life: 0.5, grow: 1.8, color: 0x7a0000, opacity: 0.9, vel: dir.clone().multiplyScalar(0.6) });
@@ -1598,12 +1650,12 @@ function updateGore(dt) {
     if (e.phase !== 'dead') continue;
     if (e.neck > 0) {
       e.neck -= dt;
-      const np = e.c.group.localToWorld(_p.set(0, 1.55, 0));
+      const np = e.c.group.localToWorld(_p.set(0, e.c.extra.neckY || 1.55, 0));
       const up = new T.Vector3(0, 1, 0).applyQuaternion(e.c.group.quaternion);
       emitBlood(np, up, 4, 3.5 * Math.min(1, e.neck), 0.35, 1);
     }
     if (e.wound && e.wound.t > 0) { e.wound.t -= dt; emitBlood(e.c.group.localToWorld(_p.copy(e.wound.local)), new T.Vector3(0, -0.3, -1), 1, 1.2, 0.5, 0.8); }
-    if (e.shoulders) e.shoulders.forEach(sh => { if (sh.t > 0) { sh.t -= dt; emitBlood(e.c.group.localToWorld(_p.set(sh.side, 1.38, 0)), new T.Vector3(Math.sign(sh.side), 0.5, 0), 2, 2.5, 0.4, 1); } });
+    if (e.shoulders) e.shoulders.forEach(sh => { if (sh.t > 0) { sh.t -= dt; emitBlood(e.c.group.localToWorld(_p.set(sh.side, sh.y, 0)), new T.Vector3(Math.sign(sh.side), 0.5, 0), 2, 2.5, 0.4, 1); } });
     if (!e.pooled && e.t > 0.6) {
       e.pooled = true;
       dropRay.set(e.c.group.localToWorld(_p.set(0, 0.9, -0.4)), new T.Vector3(0, -1, 0)); dropRay.far = 4;
@@ -1847,24 +1899,22 @@ function difficulty() {
   };
 }
 function pickOutlaw() {
-  const r = Math.random();
-  if (level >= 2 && r < 0.18) return 'gunslinger';
-  if (level >= 2 && r < 0.36) return 'brute';
-  return Math.random() < 0.3 ? 'kid' : 'bandit';
+  return Math.random() < (level >= 2 ? 0.4 : 0.25) ? 'annie' : 'outlaw';
 }
 function spawn(forceSlot, forceKind) {
   const free = slots.filter(s => !s.busy);
   if (!free.length) return null;
   const slot = forceSlot || pick(free);
   let kind = forceKind || pickOutlaw();
-  if (!forceKind && (slot.type === 'window' || slot.type === 'door') && Math.random() < (level < 2 ? 0.12 : 0.2)) kind = pick(['lady', 'barkeep']);
+  if (!forceKind && (slot.type === 'window' || slot.type === 'door') && Math.random() < (level < 2 ? 0.12 : 0.2)) kind = 'sheriff';
   slot.busy = true;
   const c = buildCharacter(kind);
   const V = VARIANTS[kind];
   c.group.scale.setScalar(V.scale);
+  if (c.extra.cutout && Math.random() < 0.5) c.group.scale.x *= -1;
   scene.add(c.group);
   const face = Math.atan2(camera.position.x - slot.pos.x, camera.position.z - slot.pos.z);
-  c.group.rotation.y = face * (slot.type === 'door' ? 0.6 : 0.85);
+  c.group.rotation.y = c.extra.cutout ? face : face * (slot.type === 'door' ? 0.6 : 0.85);
   const e = {
     slot, kind, c, V, seed: rand(0, 100), phase: 'rise', t: 0, aim: 0, fall: 0, sink: 0, flinch: 0, hp: V.hp || 1, cocked: false,
     fuse: difficulty().fuse * (V.fuse || 1) * rand(0.92, 1.12), stay: rand(1.6, 2.1), meshes: [],
@@ -1884,16 +1934,21 @@ function placeEnemy(e) {
   g.rotation.x = -e.fall - e.flinch * 0.5 + (e.slot.lean || 0) * p * (1 - e.fall);
   if (e.c.rightArm && !e.c.rightArm.gone) {
     const a = e.aim;
-    e.c.rightArm.sh.rotation.x = -a * Math.PI / 2 * 0.98;
-    e.c.rightArm.sh.rotation.z = 0.16 * (1 - a) - 0.08 * a;
+    if (e.c.extra.cutout) { e.c.rightArm.sh.rotation.x = -a * 1.1; e.c.rightArm.sh.rotation.z = -0.45 * a; }
+    else { e.c.rightArm.sh.rotation.x = -a * Math.PI / 2 * 0.98; e.c.rightArm.sh.rotation.z = 0.16 * (1 - a) - 0.08 * a; }
     e.c.rightArm.el.rotation.x = -0.45 * (1 - a);
     e.c.bang.visible = a > 0.85 && e.phase === 'up' && Math.sin(time * 28) > -0.3;
     e.c.head.rotation.x = -0.05 * a;
   }
   const idle = (e.phase === 'up' || e.phase === 'rise') ? 1 - e.aim : 0;
-  e.c.head.rotation.y = Math.sin(time * 0.9 + e.seed) * 0.3 * idle;
+  if (e.c.extra.cutout) {
+    e.c.head.rotation.z = Math.sin(time * 0.9 + e.seed) * 0.06 * idle;
+    if (e.c.leftArm && !e.c.leftArm.gone) e.c.leftArm.sh.rotation.z = Math.sin(time * 1.1 + e.seed) * 0.05 * idle;
+  } else {
+    e.c.head.rotation.y = Math.sin(time * 0.9 + e.seed) * 0.3 * idle;
+    if (e.c.leftArm && !e.c.leftArm.gone) e.c.leftArm.sh.rotation.x = Math.sin(time * 1.1 + e.seed) * 0.08 * idle;
+  }
   g.rotation.z = Math.sin(time * 1.3 + e.seed) * 0.025 * idle;
-  if (e.c.leftArm && !e.c.leftArm.gone) e.c.leftArm.sh.rotation.x = Math.sin(time * 1.1 + e.seed) * 0.08 * idle;
   if (e.c.extra.parasol) e.c.extra.parasol.rotation.y = time * 1.5;
 }
 function removeEnemy(e) { scene.remove(e.c.group); e.slot.busy = false; }
@@ -1908,7 +1963,7 @@ function shoot() {
 
   ray.setFromCamera(pointer, camera);
   const targets = staticHits.concat(...enemies.filter(e => e.phase !== 'dead').map(e => e.meshes));
-  let hit = ray.intersectObjects(targets, false)[0];
+  let hit = firstSolid(ray.intersectObjects(targets, false));
   if (!hit || !hit.object.userData.enemy) hit = assist(targets) || hit;
   if (!hit) { combo = 1; updateHud(); return; }
   const pan = panOf(hit.point);
@@ -1917,11 +1972,11 @@ function shoot() {
   if (e) {
     const part = o.userData.part;
     const dir = hit.point.clone().sub(camera.position).normalize();
-    if (e.kind === 'lady' || e.kind === 'barkeep') {
+    if (INNOCENT.has(e.kind)) {
       e.phase = 'dead'; e.t = 0;
       gore(e, part, hit.point, dir);
       combo = 1;
-      floatText(hit.point, e.kind === 'lady' ? 'Это же миссис Хопкинс!' : 'Бармен ни при чём!', '#ff9a7a');
+      floatText(hit.point, e.kind === 'sheriff' ? 'Это же шериф!' : e.kind === 'lady' ? 'Это же миссис Хопкинс!' : 'Бармен ни при чём!', '#ff9a7a');
       hurt(false);
     } else if (part === 'body' && e.hp > 1) {
       e.hp--; e.flinch = 1;
@@ -1963,6 +2018,14 @@ function shoot() {
   }
   updateHud();
 }
+// Painted parts are flat cards: a hit only counts where the picture is opaque.
+function solidAt(h) {
+  const m = h.object.userData.mask;
+  if (!m || !h.uv) return true;
+  const x = clamp(h.uv.x * m.w | 0, 0, m.w - 1), y = clamp((1 - h.uv.y) * m.h | 0, 0, m.h - 1);
+  return m.a[y * m.w + x] > 100;
+}
+const firstSolid = hits => hits.find(solidAt);
 // Aim assist: if the exact ray misses, probe rings of rays around the crosshair (up to ~36px)
 // and take the closest one that reaches an enemy with nothing in between.
 const _nd = new T.Vector2();
@@ -1974,7 +2037,7 @@ function assist(targets) {
       const a = k / 12 * Math.PI * 2 + r;
       _nd.set(pointer.x + Math.cos(a) * r * sx, pointer.y + Math.sin(a) * r * sy);
       ray.setFromCamera(_nd, camera);
-      const h = ray.intersectObjects(targets, false)[0];
+      const h = firstSolid(ray.intersectObjects(targets, false));
       if (h && h.object.userData.enemy) return h;
     }
   }
@@ -2211,8 +2274,8 @@ function update(dt) {
 }
 
 // menu dressing
-{ const d = spawn(slots.find(s => s.type === 'door'), 'gunslinger'); d.phase = 'up'; d.aim = 0.2; }
-{ const d = spawn(slots.filter(s => s.type === 'window')[3], 'bandit'); d.phase = 'up'; }
+{ const d = spawn(slots.find(s => s.type === 'door'), 'annie'); d.phase = 'up'; d.aim = 0.2; }
+{ const d = spawn(slots.filter(s => s.type === 'window')[3], 'outlaw'); d.phase = 'up'; }
 
 {
   const box = $('quality');
@@ -2237,7 +2300,7 @@ $('startBtn').focus();
 // doesn't stall the frame while shaders compile.
 {
   const tmp = [];
-  ['bandit', 'gunslinger', 'brute', 'kid', 'lady', 'barkeep'].forEach(k => { const c = buildCharacter(k); c.group.position.set(0, -50, 0); scene.add(c.group); tmp.push(c.group); });
+  ['outlaw', 'annie', 'sheriff'].forEach(k => { const c = buildCharacter(k); c.group.position.set(0, -50, 0); scene.add(c.group); tmp.push(c.group); });
   [fleshMat, boneMat, CM(0xc68d63)].forEach(m => { const x = new T.Mesh(gibGeos[0], m); x.position.set(0, -50, 0); scene.add(x); tmp.push(x); });
   spawnSprite(puffTex, new T.Vector3(0, -50, 0), { size: 0.1, life: 0.01 });
   spawnSprite(glowTex, new T.Vector3(0, -50, 0), { size: 0.1, life: 0.01, add: true });
