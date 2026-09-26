@@ -170,6 +170,12 @@
   .btn:focus-visible { outline: 3px solid var(--rust); outline-offset: 3px; }
   .btn:disabled { opacity: .5; cursor: wait; }
   .loading { font-family: var(--display); font-size: 15px; opacity: .7; }
+  .quality { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
+  .quality span { font-family: var(--display); letter-spacing: .08em; text-transform: uppercase; font-size: 12px; margin-right: 4px; }
+  .quality button { font: 14px var(--body); padding: 5px 10px; border: 1.5px solid var(--ink); border-radius: 3px; background: transparent; color: var(--ink); cursor: pointer; }
+  .quality button.on { background: var(--ink); color: var(--paper); }
+  .quality button:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
+  .qnote { font-size: 13px; opacity: .7; min-height: 1em; }
   @media (prefers-reduced-motion: reduce) { .poster { transform: none; } .float { animation-duration: .6s; } }
 </style>
 </head>
@@ -218,6 +224,11 @@
       <li><b>Бутылки</b><span>на коновязях, +$50 за каждую</span></li>
       <li><b>Дама, бармен</b><span>мирные. Попадёшь — минус жизнь</span></li>
     </ul>
+    <div class="quality" id="quality" role="group" aria-label="Качество графики">
+      <span>Графика</span>
+      <button type="button" data-q="auto">Авто</button><button type="button" data-q="low">Низкая</button><button type="button" data-q="medium">Средняя</button><button type="button" data-q="high">Высокая</button>
+    </div>
+    <span class="qnote" id="qnote"></span>
     <button class="btn" id="startBtn" type="button" disabled>К бою</button>
     <span class="loading" id="loading">Строим улицу…</span>
   </div>
@@ -260,15 +271,56 @@ const ease = t => 1 - Math.pow(1 - t, 3);
 
 try { await Promise.race([Promise.all([document.fonts.load('120px "Rye"'), document.fonts.load('60px "Kelly Slab"')]), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
 
+// ================= quality presets =================
+const QUALITY = {
+  low:    { label: 'Низкая',  pr: 0.75, aa: false, shadow: 0,    dust: false, clouds: false, drops: 180 },
+  medium: { label: 'Средняя', pr: 1.0,  aa: true,  shadow: 2048, dust: true,  clouds: true,  drops: 350 },
+  high:   { label: 'Высокая', pr: 1.25, aa: true,  shadow: 4096, dust: true,  clouds: true,  drops: 550 },
+};
+const LOWER = { high: 'medium', medium: 'low' };
+function detectQuality() {
+  const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
+  let gpu = '';
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    gpu = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)).toLowerCase() : '';
+    const lose = gl && gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
+  } catch (e) {}
+  if (mobile || /swiftshader|llvmpipe|software|mali|adreno|powervr/.test(gpu)) return 'low';
+  if (/intel|hd graphics|uhd graphics|iris/.test(gpu) || (navigator.hardwareConcurrency || 4) <= 4) return 'medium';
+  return 'high';
+}
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+const qPref = QUALITY[store.get('saloon3d-quality')] ? store.get('saloon3d-quality') : 'auto';
+const qName = qPref !== 'auto' ? qPref : (QUALITY[store.get('saloon3d-auto')] ? store.get('saloon3d-auto') : detectQuality());
+const Q = QUALITY[qName];
+
+// "Wild West" grade inside tone mapping (no extra render pass): ACES, then a faded sepia
+// palette with cooler shadows and firmer contrast. Deep reds (blood) keep their colour.
+T.ShaderChunk.tonemapping_pars_fragment = T.ShaderChunk.tonemapping_pars_fragment.replace(
+  'vec3 CustomToneMapping( vec3 color ) { return color; }',
+  `vec3 CustomToneMapping( vec3 color ) {
+    vec3 c = ACESFilmicToneMapping( color );
+    float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
+    float redness = 1.0 - max( c.g, c.b ) / max( c.r, 1e-4 );
+    float keep = smoothstep( 0.9, 0.97, redness ) * step( 0.02, c.r );
+    vec3 tint = mix( vec3( l ) * vec3( 0.84, 0.9, 1.02 ), vec3( l ) * vec3( 1.1, 0.98, 0.8 ), smoothstep( 0.0, 0.45, l ) );
+    c = mix( tint, c, mix( 0.34, 1.0, keep ) );
+    vec3 g = pow( max( c, vec3( 0.0 ) ), vec3( 0.4545 ) );
+    g = mix( g, g * g * ( 3.0 - 2.0 * g ), 0.5 );
+    return pow( g, vec3( 2.2 ) );
+  }`);
+
 // ================= renderer & post =================
 const stage = $('stage');
-const renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new T.WebGLRenderer({ antialias: Q.aa, powerPreference: 'high-performance' });
 // Fixed resolution: changing it at runtime rebuilds buffers and makes the picture blink.
-const PR = Math.min(window.devicePixelRatio || 1, 1.25);
+const PR = Math.min(window.devicePixelRatio || 1, Q.pr);
 renderer.setPixelRatio(PR);
-renderer.toneMapping = T.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.25;
-renderer.shadowMap.enabled = true;
+renderer.toneMapping = T.CustomToneMapping;
+renderer.toneMappingExposure = 1.3;
+renderer.shadowMap.enabled = Q.shadow > 0;
 renderer.shadowMap.type = T.PCFShadowMap;
 renderer.info.autoReset = false;
 stage.appendChild(renderer.domElement);
@@ -491,7 +543,7 @@ function rimify(m) {
   m.onBeforeCompile = sh => {
     sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       float rimF = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
-      totalEmissiveRadiance += vec3(1.0, 0.6, 0.3) * pow(rimF, 2.6) * 1.1;`);
+      totalEmissiveRadiance += vec3(1.0, 0.9, 0.75) * pow(rimF, 2.6) * 1.2;`);
   };
   m.customProgramCacheKey = () => 'rim';
   return m;
@@ -532,29 +584,33 @@ const SUN_DIR = new T.Vector3(-0.62, 0.36, 0.7).normalize();
 const GLOW_DIR = new T.Vector3(-0.85, 0.1, -0.52).normalize();
 const skyMat = new T.ShaderMaterial({
   side: T.BackSide, depthWrite: false, fog: false,
-  uniforms: { glowDir: { value: GLOW_DIR }, time: { value: 0 }, linearOut: { value: 0 } },
+  uniforms: { glowDir: { value: GLOW_DIR }, time: { value: 0 }, linearOut: { value: 0 }, clouds: { value: Q.clouds ? 1 : 0 } },
   vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `
-    uniform vec3 glowDir; uniform float time; uniform float linearOut; varying vec3 vP;
+    uniform vec3 glowDir; uniform float time; uniform float linearOut; uniform float clouds; varying vec3 vP;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
     float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 3; i++){ v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
     void main(){
       vec3 d = normalize(vP); float h = d.y;
-      vec3 top = vec3(0.13, 0.12, 0.30), mid = vec3(0.62, 0.30, 0.36), hor = vec3(1.0, 0.66, 0.44);
+      vec3 top = vec3(0.16, 0.17, 0.3), mid = vec3(0.52, 0.4, 0.44), hor = vec3(0.95, 0.76, 0.58);
       vec3 c = mix(hor, mid, smoothstep(0.0, 0.2, h));
       c = mix(c, top, smoothstep(0.16, 0.62, h));
       float s = max(dot(d, glowDir), 0.0);
       c += vec3(1.0, 0.5, 0.2) * pow(s, 5.0) * 0.55 + vec3(1.0, 0.82, 0.55) * pow(s, 40.0) * 0.7;
-      vec2 uv = d.xz / (h + 0.12) * 0.9 + vec2(time * 0.004, 0.0);
-      float cl = fbm(uv * 1.6);
-      float streak = fbm(vec2(uv.x * 0.6, uv.y * 3.5) + 7.0);
-      float cov = smoothstep(0.52, 0.78, cl * 0.6 + streak * 0.5) * smoothstep(0.03, 0.12, h) * (1.0 - smoothstep(0.32, 0.6, h));
-      vec3 lit = mix(vec3(0.42, 0.22, 0.36), vec3(1.0, 0.6, 0.38), pow(s, 1.5) * 0.9 + 0.2);
-      c = mix(c, lit, cov * 0.85);
-      if (linearOut > 0.5) c = pow(c, vec3(2.2)) * 1.25;
+      if (clouds > 0.5) {
+        vec2 uv = d.xz / (h + 0.12) * 0.9 + vec2(time * 0.004, 0.0);
+        float cl = fbm(uv * 1.6);
+        float streak = fbm(vec2(uv.x * 0.6, uv.y * 3.5) + 7.0);
+        float cov = smoothstep(0.52, 0.78, cl * 0.6 + streak * 0.5) * smoothstep(0.03, 0.12, h) * (1.0 - smoothstep(0.32, 0.6, h));
+        vec3 lit = mix(vec3(0.42, 0.3, 0.36), vec3(1.0, 0.72, 0.5), pow(s, 1.5) * 0.9 + 0.2);
+        c = mix(c, lit, cov * 0.85);
+      }
+      c = pow(c, vec3(2.2)) * 1.25;
       gl_FragColor = vec4(c, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
     }`,
 });
 const sky = new T.Mesh(new T.SphereGeometry(500, 48, 24), skyMat);
@@ -569,10 +625,10 @@ scene.add(sky);
 }
 
 scene.add(new T.HemisphereLight(0xd8c0e0, 0x7a4a2a, 0.8));
-const sun = new T.DirectionalLight(0xffb878, 4.4);
+const sun = new T.DirectionalLight(0xffd6a8, 4.4);
 sun.position.copy(SUN_DIR).multiplyScalar(70);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.mapSize.set(Q.shadow || 1024, Q.shadow || 1024);
 Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 22, bottom: -22, near: 1, far: 160 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025;
 scene.add(sun, sun.target);
@@ -1329,7 +1385,7 @@ function hitNormal(hit, dir) {
   return n;
 }
 // flying droplets (instanced, each checks the segment it travels against the world)
-const DROP_MAX = 550;
+const DROP_MAX = Q.drops;
 const drops = new T.InstancedMesh(new T.SphereGeometry(1, 6, 4), new T.MeshStandardMaterial({ color: 0x7a0000, roughness: 0.15, metalness: 0.1, emissive: 0x200000 }), DROP_MAX);
 drops.count = 0; drops.frustumCulled = false; drops.userData.dynamic = true; scene.add(drops);
 const dropList = [];
@@ -1488,7 +1544,7 @@ const dustGeo = new T.BufferGeometry();
 const dustPos = new Float32Array(DUST * 3);
 for (let i = 0; i < DUST; i++) { dustPos[i * 3] = rand(-20, 20); dustPos[i * 3 + 1] = rand(0.2, 8); dustPos[i * 3 + 2] = rand(-1, 14); }
 dustGeo.setAttribute('position', new T.BufferAttribute(dustPos, 3));
-scene.add(new T.Points(dustGeo, new T.PointsMaterial({ color: 0xffd9a0, size: 0.06, transparent: true, opacity: 0.6, depthWrite: false, map: glowTex, blending: T.AdditiveBlending })));
+scene.add(new T.Points(dustGeo, new T.PointsMaterial({ color: 0xffd9a0, size: 0.06, transparent: true, opacity: 0.6, depthWrite: false, map: glowTex, blending: T.AdditiveBlending }))).children.at(-1).visible = Q.dust;
 
 const tw = new T.Group();
 {
@@ -2023,6 +2079,20 @@ function update(dt) {
 { const d = spawn(slots.find(s => s.type === 'door'), 'gunslinger'); d.phase = 'up'; d.aim = 0.2; }
 { const d = spawn(slots.filter(s => s.type === 'window')[3], 'bandit'); d.phase = 'up'; }
 
+{
+  const box = $('quality');
+  box.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('on', b.dataset.q === qPref);
+    b.setAttribute('aria-pressed', b.dataset.q === qPref);
+    b.addEventListener('click', () => {
+      if (b.dataset.q === qPref) return;
+      store.set('saloon3d-quality', b.dataset.q);
+      if (b.dataset.q === 'auto') store.set('saloon3d-auto', '');
+      location.reload();
+    });
+  });
+  $('qnote').textContent = qPref === 'auto' ? `Сейчас: ${Q.label.toLowerCase()}. Если тормозит, выберите «Низкая».` : '';
+}
 updateHud();
 $('startBtn').disabled = false;
 $('loading').hidden = true;
@@ -2040,9 +2110,21 @@ $('startBtn').focus();
   tmp.forEach(o => scene.remove(o));
 }
 
-let last = performance.now();
+// In auto mode, watch the frame rate while the poster is up; if it is poor, step the
+// quality down once and reload behind the poster (nothing blinks during play).
+let last = performance.now(), menuTime = 0, menuFrames = 0;
 renderer.setAnimationLoop(now => {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const raw = (now - last) / 1000; last = now;
+  const dt = Math.min(0.05, raw);
+  if (qPref === 'auto' && state === 'menu' && LOWER[qName] && !document.hidden && raw < 0.5) {
+    menuTime += raw;
+    if (menuTime > 1.5) menuFrames++;
+    if (menuTime > 4) {
+      const fps = menuFrames / (menuTime - 1.5);
+      if (fps < 40) { store.set('saloon3d-auto', LOWER[qName]); location.reload(); return; }
+      menuTime = -1e9;
+    }
+  }
   update(dt);
   renderer.info.reset();
   renderer.render(scene, camera);
