@@ -1060,7 +1060,7 @@ inLoc(1, g => {
     [[0.9, 0], [-0.9, 0.3]].forEach(([dx, rr]) => { const ch = new T.Group(); ch.position.set(x + dx, 0, z + 0.1); ch.rotation.y = rr; g.add(ch); add(ch, BOX(0.45, 0.06, 0.45), tMat, 0, 0.47, 0); add(ch, BOX(0.45, 0.6, 0.06), tMat, 0, 0.8, -0.2); [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]].forEach(([a, b]) => add(ch, BOX(0.05, 0.47, 0.05), dark, a, 0.235, b)); });
   });
   // piano on the right
-  add(g, BOX(1.6, 1.4, 0.7), trimMat(0x241410), 9.9, 0.7, 1.5); add(g, BOX(1.5, 0.08, 0.35), M(0xf0ead8), 9.9, 0.95, 1.95);
+  add(g, BOX(0.7, 1.4, 1.6), trimMat(0x241410), -10.45, 0.7, 6.2); add(g, BOX(0.35, 0.08, 1.5), M(0xf0ead8), -10.0, 0.95, 6.2); add(g, BOX(0.3, 0.9, 1.4), trimMat(0x241410), -10.6, 1.8, 6.2);
   // chandeliers
   [-4, 4].forEach(x => {
     const ch = new T.Group(); ch.position.set(x, 6.2, 0); g.add(ch);
@@ -1503,7 +1503,7 @@ await Promise.all(Object.entries(window.CUTOUTS || {}).map(async ([name, c]) => 
     const d = cg.getImageData(0, 0, img.width, img.height).data, a = new Uint8Array(img.width * img.height);
     for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3];
     const mat = new T.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: T.DoubleSide, roughness: 0.85, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.3 });
-    parts[k] = Object.assign({}, p, { mat, mask: { a, w: img.width, h: img.height } });
+    parts[k] = Object.assign({}, p, { mat, img, mask: { a, w: img.width, h: img.height } });
   }));
   CUT[name] = Object.assign({}, c, { parts });
 }));
@@ -1537,6 +1537,15 @@ function inPoly(x, y, poly) {
       geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2); geo.scale(sc, sc, sc);
       const k = H / c.height;
       const toImg = (x, y) => [c.cx + x / k, c.bottom - y / k], toM = (px, py) => [(px - c.cx) * k, (c.bottom - py) * k];
+      // front projection: model x-extent → picture x-extent, height → picture height
+      geo.computeBoundingBox();
+      const gb = geo.boundingBox, [bx0, by0, bx1, by1] = c.bbox;
+      { const P = geo.attributes.position, uv2 = new Float32Array(P.count * 2);
+        for (let i = 0; i < P.count; i++) {
+          uv2[i * 2] = (P.getX(i) - gb.min.x) / (gb.max.x - gb.min.x);
+          uv2[i * 2 + 1] = P.getY(i) / H;
+        }
+        geo.setAttribute('projUv', new T.BufferAttribute(uv2, 2)); }
       const pos = geo.attributes.position, names = Object.keys(geo.attributes);
       const lists = { body: [], head: [], gun: [], free: [] };
       // the 3D arm is a little fatter than its outline in the picture: grow the outlines ~14 px
@@ -1561,12 +1570,107 @@ function inPoly(x, y, poly) {
       const [mx, my] = toM(...c.muzzle);
       const mat = src.material;
       mat.metalness = 0; mat.roughness = 0.8; mat.side = T.DoubleSide;
-      if (mat.map) { mat.emissive = new T.Color(0xffffff); mat.emissiveMap = mat.map; mat.emissiveIntensity = 0.22; }
+      const fimg = new Image(); fimg.src = c.full; await fimg.decode();
+      const ptex = new T.Texture(fimg); ptex.colorSpace = T.SRGBColorSpace; ptex.anisotropy = maxAniso; ptex.needsUpdate = true;
+      mat.onBeforeCompile = sh => {
+        sh.uniforms.projMap = { value: ptex };
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 projUv; varying vec2 vProjUv; varying float vFront;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvProjUv = projUv; vFront = smoothstep(0.1, 0.5, normal.z);');
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D projMap; varying vec2 vProjUv; varying float vFront;')
+          .replace('#include <map_fragment>', '#include <map_fragment>\nvec4 pj = texture2D(projMap, vProjUv); diffuseColor.rgb = mix(diffuseColor.rgb, pj.rgb, smoothstep(0.35, 0.9, pj.a) * vFront);')
+          .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 0.24;');
+      };
+      mat.customProgramCacheKey = () => 'proj-' + name;
       M3D[name] = { geos: { body: build(lists.body), head: build(lists.head), gun: build(lists.gun), free: build(lists.free) }, mat, H,
         neck: toM(...c.neck), gun: pv('gun'), free: pv('free'), muzzle: [mx, my, zNear(lists.gun, mx, my, 0.1)] };
     } catch (e) { console.warn('3D model failed, using the painted card for', name, e); }
   }
 }
+// ================= set dressing: wanted posters and extra props =================
+{
+  const posterTex = (who, reward) => {
+    const [c, g] = cnv(256, 360);
+    g.fillStyle = '#e4cf9f'; g.fillRect(0, 0, 256, 360);
+    for (let i = 0; i < 1200; i++) { g.fillStyle = `rgba(120,80,30,${rand(0.03, 0.1)})`; g.fillRect(rand(0, 256), rand(0, 360), rand(1, 6), rand(1, 3)); }
+    const gr = g.createRadialGradient(128, 180, 60, 128, 180, 230); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(110,60,20,.55)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 360);
+    g.fillStyle = '#2a170c'; g.textAlign = 'center';
+    g.font = '52px "Rye", Georgia, serif'; g.fillText('WANTED', 128, 62);
+    g.font = '15px "Kelly Slab", Georgia, serif'; g.fillText('DEAD OR ALIVE', 128, 84);
+    const im = CUT[who] && CUT[who].parts.head.img;
+    g.fillStyle = '#cdb483'; g.fillRect(48, 96, 160, 150);
+    if (im) { const s = Math.min(150 / im.width, 150 / im.height); g.globalAlpha = 0.9; g.filter = 'sepia(1) contrast(1.2)'; g.drawImage(im, 128 - im.width * s / 2, 98, im.width * s, im.height * s); g.filter = 'none'; g.globalAlpha = 1; }
+    g.strokeStyle = '#2a170c'; g.lineWidth = 3; g.strokeRect(48, 96, 160, 150);
+    g.font = '38px "Rye", Georgia, serif'; g.fillText(reward, 128, 296);
+    g.font = '14px "Kelly Slab", Georgia, serif'; g.fillText('REWARD · SHERIFF’S OFFICE', 128, 324);
+    return toTex(c);
+  };
+  const posterMats = [posterTex('bandit', '$500'), posterTex('cowgirl', '$800'), posterTex('bandit', '$300')].map(t => new T.MeshStandardMaterial({ map: t, roughness: 0.95, side: T.DoubleSide }));
+  const poster = (x, y, z, ry, i) => { const m = add(scene, G('posterPlane', () => new T.PlaneGeometry(0.62, 0.87)), posterMats[i % posterMats.length], x, y, z, false, true); m.rotation.set(0, ry, rand(-0.06, 0.06)); return m; };
+  // street facades (between door and window)
+  [[-7.4 - 1.45, 1.55], [-7.4 + 1.45, 1.6], [0 - 1.5, 1.7], [7.4 + 1.5, 1.6]].forEach(([x, y], i) => poster(x, y, 0.2, 0, i));
+  // saloon interior back wall and the mine portal
+  poster(200 + 0.2, 2.2, -6.94, 0, 1); poster(200 + 9.3, 2.1, -6.94, 0, 0); poster(-200 + 3.72, 1.7, -12.04, 0, 2);
+
+  // --- street extras ---
+  const wood = trimMat(0x6a4a2c), iron = M(0x2c2a2a, { metalness: 0.7, roughness: 0.45 });
+  const pump = new T.Group(); pump.position.set(-1.6, 0, 5.6); scene.add(pump);
+  add(pump, CYL(0.12, 0.14, 1.1, 12), iron, 0, 0.55, 0); add(pump, CYL(0.05, 0.05, 0.4, 8), iron, 0.18, 0.9, 0).rotation.z = Math.PI / 2;
+  add(pump, BOX(0.6, 0.06, 0.06), iron, -0.1, 1.2, 0).rotation.z = -0.4; add(pump, CYL(0.35, 0.3, 0.3, 16), wood, 0.25, 0.15, 0);
+  [[-11.5, 3.2, 0.5], [11.0, 3.4, -0.4]].forEach(([x, z, r]) => { const b = new T.Group(); b.position.set(x, 0, z); b.rotation.y = r; scene.add(b); add(b, BOX(1.8, 0.07, 0.42), wood, 0, 0.48, 0); [-0.75, 0.75].forEach(dx => add(b, BOX(0.08, 0.48, 0.38), wood, dx, 0.24, 0)); add(b, BOX(1.8, 0.35, 0.06), wood, 0, 0.75, -0.19); });
+  { const w = new T.Group(); w.position.set(9.2, 0.55, 2.9); w.rotation.set(0.2, 0.3, 0); scene.add(w); add(w, new T.TorusGeometry(0.55, 0.045, 6, 24), wood); for (let i = 0; i < 6; i++) add(w, BOX(0.035, 1.05, 0.035), wood).rotation.z = i / 6 * Math.PI; add(w, CYL(0.1, 0.1, 0.12, 10), wood).rotation.x = Math.PI / 2; }
+  // scattered stones on the street
+  for (let i = 0; i < 70; i++) { const s = rand(0.04, 0.14); const m = add(scene, G('pebble', () => new T.IcosahedronGeometry(1, 0)), M(pick([0x9a7a5a, 0x7a6048, 0xb09070]), { flatShading: true }), rand(-16, 16), s * 0.4, rand(3.5, 12), true, true); m.scale.set(s * rand(1, 1.6), s * 0.6, s); m.rotation.y = rand(0, 6); }
+
+  // --- saloon interior extras ---
+  const X = 200, dark = trimMat(0x3a2414), gold = M(0xc9a04a, { metalness: 0.85, roughness: 0.3 });
+  const sign = add(scene, new T.PlaneGeometry(4.2, 1.2), new T.MeshStandardMaterial({ map: signTex('LAST CHANCE', 'SALOON · EST. 1869', '#2a1a10', '#e6c26a'), roughness: 0.7, emissive: 0x2a1a0a }), X - 6, 5.4, -6.9, false);
+  // paintings on the side walls
+  const paint = (hue) => { const [c, g] = cnv(256, 180); const sky = g.createLinearGradient(0, 0, 0, 180); sky.addColorStop(0, hue[0]); sky.addColorStop(0.6, hue[1]); sky.addColorStop(1, hue[2]); g.fillStyle = sky; g.fillRect(0, 0, 256, 180); g.fillStyle = 'rgba(80,40,30,.85)'; g.beginPath(); g.moveTo(0, 150); g.lineTo(40, 100); g.lineTo(80, 110); g.lineTo(110, 70); g.lineTo(160, 80); g.lineTo(200, 120); g.lineTo(256, 105); g.lineTo(256, 180); g.lineTo(0, 180); g.fill(); for (let i = 0; i < 600; i++) { g.fillStyle = `rgba(255,240,200,${rand(0.02, 0.07)})`; g.fillRect(rand(0, 256), rand(0, 180), rand(2, 8), 1); } return toTex(c); };
+  [[-10.85, 4.4, -3.5, Math.PI / 2, ['#e8a060', '#c0603a', '#4a2a2a']], [10.85, 4.2, -2.5, -Math.PI / 2, ['#9ab0c0', '#e0b080', '#5a3a2a']], [10.85, 4.4, 3.0, -Math.PI / 2, ['#f0c070', '#d07040', '#3a2020']]].forEach(([x, y, z, r, hue]) => {
+    const f = new T.Group(); f.position.set(X + x, y, z); f.rotation.y = r; scene.add(f);
+    add(f, new T.PlaneGeometry(1.6, 1.1), new T.MeshStandardMaterial({ map: paint(hue), roughness: 0.8 }), 0, 0, 0.03, false);
+    add(f, BOX(1.8, 1.3, 0.05), gold, 0, 0, 0, false);
+  });
+  // antlers above the sign
+  { const a = new T.Group(); a.position.set(X - 6, 6.45, -6.8); scene.add(a); add(a, BOX(0.5, 0.35, 0.08), dark); add(a, SPH(0.16, 10, 8), M(0xd8ccb4), 0, -0.05, 0.1).scale.set(0.9, 1, 1.3);
+    [-1, 1].forEach(sd => { let px = sd * 0.1, py = 0.05; for (let i = 0; i < 5; i++) { const nx = px + sd * 0.16, ny = py + 0.12; beam(a, new T.Vector3(px, py, 0.1), new T.Vector3(nx, ny, 0.1), 0.035, M(0xe0d4bc)); if (i % 2) beam(a, new T.Vector3(nx, ny, 0.1), new T.Vector3(nx - sd * 0.02, ny + 0.16, 0.1), 0.028, M(0xe0d4bc)); px = nx; py = ny; } }); }
+  // wall lamps
+  [[-10.8, -1], [-10.8, 5], [10.8, 0.5], [10.8, 5.5]].forEach(([x, z]) => { add(scene, CYL(0.08, 0.08, 0.26, 10), lampMat, X + x * 0.985, 3.4, z, false); lampGlow(scene, X + x * 0.97, 3.45, z, 0.9); add(scene, BOX(0.06, 0.08, 0.25), gold, X + x, 3.2, z, false); });
+  // rug, spittoons, cards and chips on the tables
+  { const [c, g] = cnv(256, 160); g.fillStyle = '#6a1c18'; g.fillRect(0, 0, 256, 160); g.strokeStyle = '#d0a050'; g.lineWidth = 6; g.strokeRect(10, 10, 236, 140); g.lineWidth = 2; g.strokeRect(22, 22, 212, 116); for (let i = 0; i < 9; i++) { g.fillStyle = i % 2 ? '#2a3a5a' : '#d0a050'; g.beginPath(); g.moveTo(128, 40 + i * 9); g.lineTo(178 - i * 5, 80); g.lineTo(128, 120 - i * 9); g.lineTo(78 + i * 5, 80); g.fill(); } for (let i = 0; i < 2000; i++) { g.fillStyle = `rgba(0,0,0,${rand(0.03, 0.12)})`; g.fillRect(rand(0, 256), rand(0, 160), 2, 2); }
+    add(scene, new T.PlaneGeometry(5, 3.2), new T.MeshStandardMaterial({ map: toTex(c), roughness: 1 }), X + 1, 0.075, 3.4, false, true).rotation.x = -Math.PI / 2; }
+  [[-2.4, -2.6], [9.6, -3.4]].forEach(([x, z]) => { add(scene, CYL(0.16, 0.2, 0.26, 16), gold, X + x, 0.19, z); add(scene, CYL(0.22, 0.16, 0.06, 16), gold, X + x, 0.34, z); });
+  [[-3.5, 3.5], [5.5, 4.0], [-8, 2.0]].forEach(([x, z]) => {
+    for (let i = 0; i < 6; i++) { const cd = add(scene, BOX(0.12, 0.004, 0.17), M(i % 3 ? 0xf2ede0 : 0xb03030), X + x + rand(-0.45, 0.45), 0.865 + i * 0.002, z + rand(-0.45, 0.45), false); cd.rotation.y = rand(0, 6); }
+    for (let i = 0; i < 5; i++) add(scene, CYL(0.05, 0.05, 0.02 * (1 + i % 3), 12), M(pick([0xb02828, 0x2a4a9a, 0xe8e0d0])), X + x - 0.35 + i * 0.05, 0.87 + 0.01 * (1 + i % 3), z + 0.3, false);
+  });
+  // stairs up to the balcony along the right wall
+  for (let i = 0; i < 12; i++) { const st = add(scene, BOX(1.2, 0.3, 0.4), trimMat(0x5a3a22), X + 10.2, 0.15 + i * 0.3, -0.2 - i * 0.38, true, true); staticHits.push(st); }
+  add(scene, BOX(0.08, 0.5, 5.9), trimMat(0x3a2414), X + 9.55, 2.1, -2.3, true).rotation.x = 0.62;
+
+  // --- canyon extras ---
+  const C = -200;
+  { const t = new T.Group(); t.position.set(C - 10.5, 0, -1.2); scene.add(t); const bark = M(0x4a3a2e, { roughness: 1, flatShading: true });
+    beam(t, new T.Vector3(0, 0, 0), new T.Vector3(0.2, 2.6, 0), 0.22, bark);
+    [[0.2, 2.6, 1.3, 3.6], [0.15, 2.0, -1.0, 3.0], [0.1, 1.5, 0.9, 2.1], [1.3, 3.6, 1.9, 3.9], [-1.0, 3.0, -1.4, 3.5]].forEach(([a, b, c2, d]) => beam(t, new T.Vector3(a, b, 0), new T.Vector3(c2, d, rand(-0.3, 0.3)), 0.09, bark)); }
+  { const s = new T.Group(); s.position.set(C + 3.5, 0.12, 3.4); s.rotation.y = 0.6; scene.add(s); const bone = M(0xe6dcc6, { roughness: 0.8 });
+    add(s, SPH(0.2, 12, 10), bone).scale.set(1, 0.8, 1.4); add(s, CAP(0.07, 0.25), bone, 0, 0, 0.3).rotation.x = Math.PI / 2;
+    [-1, 1].forEach(sd => { const h = add(s, CAP(0.04, 0.35), bone, sd * 0.3, 0.12, -0.05); h.rotation.z = sd * 1.1; }); }
+  // wagon wreck
+  { const w = new T.Group(); w.position.set(C + 9.5, 0, -2.2); w.rotation.set(0, -0.7, 0.18); scene.add(w); const ww = trimMat(0x5a4030);
+    add(w, BOX(1.4, 0.35, 3.0), ww, 0, 0.55, 0, true, true); [-0.72, 0.72].forEach(x => add(w, BOX(0.06, 0.5, 3.0), ww, x, 0.9, 0));
+    const wh = new T.Group(); wh.position.set(-0.85, 0.5, 0.9); wh.rotation.y = Math.PI / 2; w.add(wh); add(wh, new T.TorusGeometry(0.5, 0.045, 6, 24), ww); for (let i = 0; i < 8; i++) add(wh, BOX(0.03, 0.95, 0.03), ww).rotation.z = i / 8 * Math.PI;
+    const lw = new T.Group(); lw.position.set(-1.6, 0.05, -0.8); lw.rotation.set(Math.PI / 2, 0, 0.4); w.add(lw); add(lw, new T.TorusGeometry(0.5, 0.045, 6, 24), ww); for (let i = 0; i < 8; i++) add(lw, BOX(0.03, 0.95, 0.03), ww).rotation.z = i / 8 * Math.PI; }
+  // rail track from the mine toward the camera
+  for (let z = -9.4; z < 4; z += 0.6) add(scene, BOX(1.5, 0.08, 0.18), trimMat(0x4a3020), C + 5 + (z + 9.4) * 0.12, 0.04, z, false, true);
+  [-0.5, 0.5].forEach(dx => { const r = add(scene, BOX(0.07, 0.07, 13.6), iron, C + 5 + dx + 0.8, 0.1, -2.6, false, true); r.rotation.y = 0.12; });
+  // fence posts and scattered rocks
+  for (let i = 0; i < 7; i++) { const x = C - 14 + i * 1.6; add(scene, BOX(0.14, 1.1 + rand(-0.2, 0.2), 0.14), trimMat(0x5a4636), x, 0.5, 6.5 + rand(-0.2, 0.2)).rotation.z = rand(-0.12, 0.12); }
+  beam(scene, new T.Vector3(C - 14, 0.9, 6.5), new T.Vector3(C - 4.4, 0.8, 6.6), 0.07, trimMat(0x5a4636));
+  const pebMat = M(0xa8704c, { flatShading: true, roughness: 1 });
+  for (let i = 0; i < 90; i++) { const s = rand(0.06, 0.3); const m = add(scene, G('pebble', () => new T.IcosahedronGeometry(1, 0)), pebMat, C + rand(-16, 16), s * 0.35, rand(-8, 9), true, true); m.scale.set(s * rand(1, 1.8), s * 0.7, s); m.rotation.y = rand(0, 6); }
+}
+
 function buildModel3D(name) {
   const m = M3D[name], g = new T.Group();
   const part = (geo, parent, px, py, pz, tag) => { const me = new T.Mesh(geo, m.mat); me.position.set(-px, -py, -pz); me.userData.part = tag; me.userData.hitbox = true; parent.add(me); return me; };
@@ -2133,7 +2237,7 @@ function pickOutlaw() {
   return Math.random() < (level >= 2 ? 0.4 : 0.25) ? 'annie' : 'outlaw';
 }
 function spawn(forceSlot, forceKind) {
-  const free = slots.filter(s => !s.busy && s.loc === loc);
+  const free = slots.filter(s => !s.busy && s.loc === loc && s.visible !== false);
   if (!free.length) return null;
   const slot = forceSlot || pick(free);
   let kind = forceKind || pickOutlaw();
@@ -2364,6 +2468,27 @@ function resize() {
   const L = LOCS[loc], d = clamp(L.fitW / tanH, L.minD, L.maxD);
   camBase.set(L.center.x + L.look.x, L.camY(d), L.center.z + L.look.z + d);
   LOOK.copy(L.center).add(L.look);
+  auditSlots();
+}
+// A spawn point is used only if the head or chest of a figure standing there can be seen from the camera.
+const auditCam = new T.PerspectiveCamera(), auditRay = new T.Raycaster();
+function auditSlots() {
+  if (typeof staticHits === 'undefined') return;
+  auditCam.copy(camera); auditCam.position.copy(camBase); auditCam.lookAt(LOOK); auditCam.updateMatrixWorld(); auditCam.updateProjectionMatrix();
+  const p = new T.Vector3(), d = new T.Vector3();
+  slots.forEach(s => {
+    if (s.loc !== loc) return;
+    let seen = 0;
+    for (const h of [1.7, 2.35]) {
+      p.copy(s.pos); p.y += h;
+      const v = p.clone().project(auditCam);
+      if (Math.abs(v.x) > 0.94 || v.y > 0.86 || v.y < -0.95) continue;
+      d.subVectors(p, auditCam.position); const dist = d.length();
+      auditRay.set(auditCam.position, d.normalize()); auditRay.far = dist - 0.3;
+      if (!auditRay.intersectObjects(staticHits, false).some(hh => !hh.object.userData.mask)) seen++;
+    }
+    s.visible = seen > 0;
+  });
 }
 addEventListener('resize', resize);
 resize();
