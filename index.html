@@ -258,6 +258,7 @@
 
 <script src="assets/cutouts.js"></script>
 <script src="assets/models.js"></script>
+<script src="assets/painted.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -1994,7 +1995,7 @@ function updateGore(dt) {
     if (!e.pooled && e.t > 0.6) {
       e.pooled = true;
       dropRay.set(e.c.group.localToWorld(_p.set(0, 0.9, -0.4)), new T.Vector3(0, -1, 0)); dropRay.far = 4;
-      const h = dropRay.intersectObjects(staticHits, false)[0];
+      const h = firstSolid(dropRay.intersectObjects(staticHits, false));
       if (h) addPool(h.point, hitNormal(h, dropRay.ray.direction), rand(0.9, 1.4) * (e.neck !== undefined ? 1.3 : 1));
     }
   }
@@ -2005,7 +2006,7 @@ function updateGore(dt) {
     d.p.addScaledVector(d.v, dt);
     _s.subVectors(d.p, _p); const len = _s.length();
     let hit = null;
-    if (len > 1e-5) { dropRay.set(_p, _s.divideScalar(len)); dropRay.far = len + d.r; hit = dropRay.intersectObjects(staticHits, false)[0]; }
+    if (len > 1e-5) { dropRay.set(_p, _s.divideScalar(len)); dropRay.far = len + d.r; hit = firstSolid(dropRay.intersectObjects(staticHits, false)); }
     if (hit) {
       const n = hitNormal(hit, dropRay.ray.direction), sp = d.v.length();
       const cosI = Math.abs(d.v.dot(n)) / (sp || 1);
@@ -2034,7 +2035,7 @@ function updateGore(dt) {
       _s.subVectors(g.o.position, _p); const len = _s.length();
       if (len > 1e-5) {
         dropRay.set(_p, _s.divideScalar(len)); dropRay.far = len + g.r;
-        const h = dropRay.intersectObjects(staticHits, false)[0];
+        const h = firstSolid(dropRay.intersectObjects(staticHits, false));
         if (h) {
           const n = hitNormal(h, dropRay.ray.direction);
           stampDecal(h.point, n, rand(0.12, 0.22) * (g.r > 0.1 ? 1.6 : 1), 'dir', g.v);
@@ -2245,7 +2246,7 @@ function spawn(forceSlot, forceKind) {
   slot.busy = true;
   const c = buildCharacter(kind);
   const V = VARIANTS[kind];
-  c.group.scale.setScalar(V.scale);
+  c.group.scale.setScalar(V.scale * (slot.scale || 1));
   if (c.extra.cutout && Math.random() < 0.5) c.group.scale.x *= -1;
   scene.add(c.group);
   const face = Math.atan2(camera.position.x - slot.pos.x, camera.position.z - slot.pos.z);
@@ -2409,7 +2410,7 @@ function setLoc(i) {
   $('locName').textContent = L.name;
 }
 function startTravel() {
-  state = 'travel'; travelT = 0; nextLoc = (loc + 1) % LOCS.length;
+  state = 'travel'; travelT = 0; nextLoc = PLAYLIST[(PLAYLIST.indexOf(loc) + 1) % PLAYLIST.length];
   showBanner(LOCS[loc].name + ': чисто!', 'Идём дальше: ' + LOCS[nextLoc].name);
   setTimeout(() => { fadeEl.style.opacity = 1; }, 250);
 }
@@ -2422,7 +2423,7 @@ function startGame() {
   bottleSpots.forEach(bs => { if (!bs.mesh) placeBottle(bs); });
   score = 0; lives = 3; combo = 1; kills = 0; shots = 0; hits = 0; level = 1;
   ammo = 6; reloading = 0; spawnT = 1.4; shake = 0; hurtFx = 0;
-  if (loc !== 0) setLoc(0); locKills = 0; fadeEl.style.opacity = 0; hideBanner();
+  if (loc !== PLAYLIST[0]) setLoc(PLAYLIST[0]); locKills = 0; fadeEl.style.opacity = 0; hideBanner();
   state = 'play';
   $('startScreen').hidden = true; $('overScreen').hidden = true;
   updateHud();
@@ -2462,12 +2463,21 @@ const camBase = new T.Vector3();
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  const tanH = Math.tan(T.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
-  camDist = clamp(13.6 / tanH, 14, 34);
-  const L = LOCS[loc], d = clamp(L.fitW / tanH, L.minD, L.maxD);
-  camBase.set(L.center.x + L.look.x, L.camY(d), L.center.z + L.look.z + d);
-  LOOK.copy(L.center).add(L.look);
+  const L = LOCS[loc];
+  if (L.painted) {
+    // same lens as the painting; on screens wider than the painting, fit its width instead
+    const imgAsp = PW / PH, vf = 2 * Math.atan(PCY / PF);
+    camera.fov = T.MathUtils.radToDeg(camera.aspect > imgAsp ? 2 * Math.atan(PCX / PF / camera.aspect) : vf);
+    camera.updateProjectionMatrix();
+    camBase.set(L.center.x, L.painted.h, L.center.z); LOOK.set(L.center.x, L.painted.h, L.center.z - 10);
+  } else {
+    camera.fov = 52; camera.updateProjectionMatrix();
+    const tanH = Math.tan(T.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+    camDist = clamp(13.6 / tanH, 14, 34);
+    const d = clamp(L.fitW / tanH, L.minD, L.maxD);
+    camBase.set(L.center.x + L.look.x, L.camY(d), L.center.z + L.look.z + d);
+    LOOK.copy(L.center).add(L.look);
+  }
   auditSlots();
 }
 // A spawn point is used only if the head or chest of a figure standing there can be seen from the camera.
@@ -2485,7 +2495,7 @@ function auditSlots() {
       if (Math.abs(v.x) > 0.94 || v.y > 0.86 || v.y < -0.95) continue;
       d.subVectors(p, auditCam.position); const dist = d.length();
       auditRay.set(auditCam.position, d.normalize()); auditRay.far = dist - 0.3;
-      if (!auditRay.intersectObjects(staticHits, false).some(hh => !hh.object.userData.mask)) seen++;
+      if (!firstSolid(auditRay.intersectObjects(staticHits, false))) seen++;
     }
     s.visible = seen > 0;
   });
@@ -2507,7 +2517,7 @@ function update(dt) {
 
   const menu = state === 'menu';
   const target = tmpV.copy(camBase);
-  if (menu) target.set(Math.sin(time * 0.15) * 3, 3.6, camDist + 5);
+  if (menu && !LOCS[loc].painted) target.set(Math.sin(time * 0.15) * 3, 3.6, camDist + 5);
   if (state === 'travel') target.copy(camera.position);
   camera.position.lerp(target, 1 - Math.exp(-dt * (menu ? 1 : 2.5)));
   lookPt.copy(LOOK);
@@ -2623,12 +2633,119 @@ function update(dt) {
     else if (e.phase === 'dead') {
       e.aim = Math.max(0, e.aim - dt * 4);
       e.fall = Math.pow(clamp(e.t / 0.45, 0, 1), 2) * 1.45;
-      e.sink = Math.max(0, e.t - 2.2) * Math.max(0, e.t - 2.2) * 6;
+      e.sink = LOCS[loc].painted ? 0 : Math.max(0, e.t - 2.2) * Math.max(0, e.t - 2.2) * 6;
       if (e.t > 3.0) e.gone = true;
     }
     placeEnemy(e);
   }
   enemies = enemies.filter(e => { if (e.gone) removeEnemy(e); return !e.gone; });
+}
+
+// ================= painted locations: the concept paintings as layered 3D sets =================
+// Each painting is cut into depth layers (planes facing the fixed game camera) with masks, so
+// enemies stand between them: inside windows and doors, behind barrels, tables and rock ledges.
+const PF = 1040, PW = 1870, PH = 841, PCX = PW / 2, PCY = PH / 2;
+const rectP = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+const circP = (cx, cy, r, n = 28) => Array.from({ length: n }, (_, i) => [cx + Math.cos(i / n * 6.2832) * r, cy + Math.sin(i / n * 6.2832) * r]);
+const PAINTED = [
+  { key: 'street', name: 'Главная улица', sub: 'Банда засела в окнах, дверях и на крышах', quota: 8, h: 3.38, x: 1000,
+    layers: [
+      { d: 70, far: true },
+      { d: 16, polys: [[[0, 30], [250, 78], [250, 125], [340, 125], [340, 100], [600, 100], [600, 125], [655, 125], [690, 160], [715, 170], [850, 170], [850, 148], [1000, 148], [1000, 170], [1140, 170], [1140, 200], [1160, 200], [1160, 145], [1300, 145], [1385, 95], [1470, 145], [1600, 145], [1600, 190], [1690, 190], [1690, 140], [1870, 60], [1870, 841], [0, 841]]],
+        holes: [rectP(320, 285, 408, 380), rectP(515, 285, 598, 380), rectP(780, 285, 875, 385), rectP(970, 285, 1060, 385), rectP(1235, 285, 1335, 385), rectP(1440, 285, 1525, 385), rectP(420, 450, 515, 622), rectP(885, 452, 975, 578), rectP(1350, 455, 1440, 622)] },
+      { d: 10.4, polys: [[[0, 615], [90, 603], [200, 612], [285, 638], [302, 700], [272, 757], [0, 762]]] },
+      { d: 11.8, polys: [[[440, 600], [470, 588], [612, 590], [617, 700], [602, 720], [443, 721]]] },
+      { d: 12.4, polys: [[[1176, 598], [1208, 598], [1208, 536], [1300, 536], [1300, 598], [1400, 600], [1400, 702], [1178, 706]]] },
+      { d: 12.6, polys: [rectP(1466, 628, 1826, 702)] },
+    ],
+    slots: [
+      ...[364, 557, 827, 1015, 1285, 1482].map(u => ({ type: 'window', u, d: 16.6, row: 382, dy: -1.25, hide: [0, -2.7, 0] })),
+      { type: 'door', u: 467, d: 16.6, row: 622, dy: 0, hide: [-1.7, 0, 0] },
+      { type: 'door', u: 930, d: 16.6, row: 622, dy: 0, hide: [1.7, 0, 0] },
+      { type: 'door', u: 1395, d: 16.6, row: 622, dy: 0, hide: [1.7, 0, 0] },
+      { type: 'roof', u: 470, d: 16.7, row: 100, dy: -1.0, hide: [0, -2.7, 0] },
+      { type: 'roof', u: 1060, d: 16.7, row: 172, dy: -1.0, hide: [0, -2.7, 0] },
+      { type: 'roof', u: 1385, d: 16.7, row: 97, dy: -1.1, hide: [0, -2.7, 0] },
+      { type: 'cover', u: 190, d: 10.9, y: 0, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 527, d: 12.3, y: 0, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 1287, d: 12.9, y: 0.3, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 1640, d: 13.1, y: 0, hide: [0, -2.9, 0] },
+    ] },
+  { key: 'saloon', name: 'Салун «Последний шанс»', sub: 'Стреляют с балкона, из-за стойки и столов', quota: 8, h: 2.04, x: 1300,
+    layers: [
+      { d: 25, far: true },
+      { d: 11.5, polys: [rectP(0, 0, PW, PH)], holes: [rectP(955, 172, 1085, 250), rectP(1165, 172, 1295, 250), rectP(1375, 172, 1505, 250)] },
+      { d: 8.86, polys: [[[85, 516], [760, 516], [762, 668], [80, 668]]] },
+      { d: 7.33, polys: [circP(1690, 610, 108), rectP(1580, 600, 1616, 692)] },
+      { d: 5.59, polys: [circP(1255, 662, 142), rectP(1092, 618, 1142, 772)] },
+    ],
+    slots: [
+      { type: 'door', u: 1020, d: 12.0, y: 2.95, hide: [-1.6, 0, 0], scale: 0.8 },
+      { type: 'door', u: 1230, d: 12.0, y: 2.95, hide: [1.6, 0, 0], scale: 0.8 },
+      { type: 'door', u: 1440, d: 12.0, y: 2.95, hide: [1.6, 0, 0], scale: 0.8 },
+      { type: 'cover', u: 300, d: 9.4, y: 0, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 620, d: 9.4, y: 0, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 1255, d: 6.0, y: 0, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 1660, d: 7.8, y: 0, hide: [0, -2.9, 0] },
+    ] },
+  { key: 'canyon', name: 'Каньон Мёртвого Койота', sub: 'Банда отходит к старой шахте', quota: 10, h: 2.39, x: 1600,
+    layers: [
+      { d: 30, far: true },
+      { d: 19.2, polys: [[[250, 255], [860, 262], [860, 548], [250, 548]]] },
+      { d: 18.5, polys: [[[985, 335], [1305, 325], [1325, 562], [985, 562]]], holes: [[[1062, 398], [1212, 398], [1212, 512], [1170, 512], [1170, 552], [1062, 552]]] },
+      { d: 17.4, polys: [[[1480, 300], [1700, 292], [1700, 560], [1480, 560]]] },
+      { d: 10.6, polys: [[[1695, 520], [1780, 500], [1870, 495], [1870, 660], [1700, 652], [1690, 590]]] },
+      { d: 8.9, polys: [[[548, 583], [622, 583], [622, 487], [768, 487], [768, 583], [848, 585], [848, 700], [553, 703]]] },
+      { d: 8.74, polys: [[[0, 530], [60, 522], [160, 525], [230, 560], [265, 610], [270, 660], [250, 700], [0, 705]]] },
+    ],
+    slots: [
+      { type: 'door', u: 1137, d: 19.0, y: 0, hide: [1.7, 0, 0] },
+      { type: 'roof', u: 430, d: 19.6, row: 255, dy: -0.3, hide: [0, -2.7, 0] },
+      { type: 'roof', u: 700, d: 19.6, row: 258, dy: -0.3, hide: [0, -2.7, 0] },
+      { type: 'roof', u: 1590, d: 17.8, row: 296, dy: -0.3, hide: [0, -2.7, 0] },
+      { type: 'cover', u: 800, d: 9.4, y: 0, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 130, d: 9.2, y: 0, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 1760, d: 11.1, y: 0, hide: [0, -2.9, 0] },
+    ] },
+];
+const PLAYLIST = [];
+{
+  const groundMat = new T.MeshBasicMaterial({ colorWrite: false });
+  for (const P of PAINTED) {
+    const li = LOCS.length;
+    const center = new T.Vector3(P.x, 0, 0);
+    LOCS.push({ name: P.name, sub: P.sub, quota: P.quota, center, painted: { h: P.h }, look: new T.Vector3(0, P.h, -10) });
+    PLAYLIST.push(li);
+    const img = new Image(); img.src = window.PAINTINGS[P.key]; await img.decode();
+    const tex = new T.Texture(img); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = maxAniso; tex.needsUpdate = true;
+    for (const L of P.layers) {
+      const w = PW * L.d / PF, hh = PH * L.d / PF;
+      const mat = new T.MeshBasicMaterial({ map: tex, toneMapped: false, fog: false });
+      const m = new T.Mesh(new T.PlaneGeometry(w, hh), mat);
+      m.position.set(P.x, P.h, -L.d);
+      m.userData.dynamic = true;
+      if (L.far) { m.renderOrder = -2; scene.add(m); continue; }
+      const MW = 935, MH = 420, [c, g] = cnv(MW, MH), k = MW / PW;
+      g.fillStyle = '#000'; g.fillRect(0, 0, MW, MH);
+      const path = poly => { g.beginPath(); poly.forEach(([x, y], i) => g[i ? 'lineTo' : 'moveTo'](x * k, y * k)); g.closePath(); g.fill(); };
+      g.fillStyle = '#fff'; L.polys.forEach(path);
+      g.fillStyle = '#000'; (L.holes || []).forEach(path);
+      const data = g.getImageData(0, 0, MW, MH).data, a = new Uint8Array(MW * MH);
+      for (let i = 0; i < a.length; i++) a[i] = data[i * 4 + 1];
+      const at = new T.CanvasTexture(c);
+      mat.alphaMap = at; mat.alphaTest = 0.5;
+      m.userData.mask = { a, w: MW, h: MH };
+      scene.add(m); staticHits.push(m);
+    }
+    // invisible ground: hides whatever sinks below it and catches bullets and blood
+    const gnd = new T.Mesh(new T.PlaneGeometry(220, 220), groundMat);
+    gnd.rotation.x = -Math.PI / 2; gnd.position.set(P.x, 0, -60); gnd.renderOrder = -1; gnd.userData.dynamic = true;
+    scene.add(gnd); staticHits.push(gnd);
+    for (const s of P.slots) {
+      const y = s.y !== undefined ? s.y : P.h - (s.row - PCY) * s.d / PF + s.dy;
+      slots.push({ type: s.type, loc: li, scale: s.scale, pos: new T.Vector3(P.x + (s.u - PCX) * s.d / PF, y, -s.d), hide: new T.Vector3(...s.hide) });
+    }
+  }
 }
 
 // ================= static batching =================
@@ -2660,8 +2777,9 @@ function update(dt) {
 }
 
 // menu dressing
-{ const d = spawn(slots.find(s => s.type === 'door'), 'annie'); d.phase = 'up'; d.aim = 0.2; }
-{ const d = spawn(slots.filter(s => s.type === 'window')[3], 'outlaw'); d.phase = 'up'; }
+setLoc(PLAYLIST[0]);
+{ const d = spawn(slots.find(s => s.loc === loc && s.type === 'door'), 'annie'); if (d) { d.phase = 'up'; d.aim = 0.2; } }
+{ const d = spawn(slots.filter(s => s.loc === loc && s.type === 'window')[3], 'outlaw'); if (d) d.phase = 'up'; }
 
 {
   const box = $('quality');
