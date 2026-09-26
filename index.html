@@ -1366,7 +1366,7 @@ function inPoly(x, y, poly) {
     const c = CUT[name];
     if (!c || !c.polys) continue;
     try {
-      const img = new Image(); img.src = md.tex; await img.decode();
+      const img = await createImageBitmap(await (await fetch(md.tex)).blob());
       const tex = new T.Texture(img); tex.colorSpace = T.SRGBColorSpace; tex.flipY = false; tex.anisotropy = maxAniso; tex.needsUpdate = true;
       const ig = new T.BufferGeometry();
       ig.setAttribute('position', new T.BufferAttribute(b64(md.pos, Float32Array), 3));
