@@ -249,6 +249,7 @@
 </div>
 
 <script src="assets/cutouts.js"></script>
+<script src="assets/models.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -1349,6 +1350,79 @@ await Promise.all(Object.entries(window.CUTOUTS || {}).map(async ([name, c]) => 
   }));
   CUT[name] = Object.assign({}, c, { parts });
 }));
+// ---------- 3D models (image-to-3D), split into head / arms / body with the same outlines ----------
+const M3D = {};
+function inPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+{
+  const b64 = (str, Arr) => { const bin = atob(str), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new Arr(u8.buffer); };
+  for (const [name, md] of Object.entries(window.MODELS3D || {})) {
+    const c = CUT[name];
+    if (!c || !c.polys) continue;
+    try {
+      const img = new Image(); img.src = md.tex; await img.decode();
+      const tex = new T.Texture(img); tex.colorSpace = T.SRGBColorSpace; tex.flipY = false; tex.anisotropy = maxAniso; tex.needsUpdate = true;
+      const ig = new T.BufferGeometry();
+      ig.setAttribute('position', new T.BufferAttribute(b64(md.pos, Float32Array), 3));
+      ig.setAttribute('uv', new T.BufferAttribute(b64(md.uv, Float32Array), 2));
+      ig.setIndex(new T.BufferAttribute(b64(md.idx, Uint32Array), 1));
+      ig.computeVertexNormals();
+      const src = { material: new T.MeshStandardMaterial({ map: tex }) };
+      const geo = ig.toNonIndexed();
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox, H = 2.3, sc = H / (bb.max.y - bb.min.y);
+      geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2); geo.scale(sc, sc, sc);
+      const k = H / c.height;
+      const toImg = (x, y) => [c.cx + x / k, c.bottom - y / k], toM = (px, py) => [(px - c.cx) * k, (c.bottom - py) * k];
+      const pos = geo.attributes.position, names = Object.keys(geo.attributes);
+      const lists = { body: [], head: [], gun: [], free: [] };
+      // the 3D arm is a little fatter than its outline in the picture: grow the outlines ~14 px
+      const grow = poly => { const cx = poly.reduce((q, p) => q + p[0], 0) / poly.length, cy = poly.reduce((q, p) => q + p[1], 0) / poly.length; return poly.map(([x, y]) => { const d = Math.hypot(x - cx, y - cy) || 1; return [x + (x - cx) / d * 14, y + (y - cy) / d * 14]; }); };
+      const gunP = grow(c.polys.gun), freeP = grow(c.polys.free);
+      for (let t = 0; t < pos.count; t += 3) {
+        const [ix, iy] = toImg((pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3, (pos.getY(t) + pos.getY(t + 1) + pos.getY(t + 2)) / 3);
+        lists[inPoly(ix, iy, gunP) ? 'gun' : inPoly(ix, iy, freeP) ? 'free' : iy < c.head_cut ? 'head' : 'body'].push(t);
+      }
+      const build = list => {
+        const g = new T.BufferGeometry();
+        for (const a of names) {
+          const at = geo.attributes[a], n = at.itemSize, arr = new Float32Array(list.length * 3 * n), get = [at.getX, at.getY, at.getZ, at.getW];
+          let o = 0;
+          for (const t of list) for (let v = 0; v < 3; v++) for (let q = 0; q < n; q++) arr[o++] = get[q].call(at, t + v);
+          g.setAttribute(a, new T.BufferAttribute(arr, n));
+        }
+        g.computeBoundingSphere(); return g;
+      };
+      const zNear = (list, x, y, r) => { let sum = 0, cnt = 0; for (const t of list) { const px = pos.getX(t), py = pos.getY(t); if (Math.hypot(px - x, py - y) < r) { sum += pos.getZ(t); cnt++; } } return cnt ? sum / cnt : 0; };
+      const pv = key => { const [x, y] = toM(...c.pivots[key]); return [x, y, zNear(lists[key], x, y, 0.12)]; };
+      const [mx, my] = toM(...c.muzzle);
+      const mat = src.material;
+      mat.metalness = 0; mat.roughness = 0.8; mat.side = T.DoubleSide;
+      if (mat.map) { mat.emissive = new T.Color(0xffffff); mat.emissiveMap = mat.map; mat.emissiveIntensity = 0.22; }
+      M3D[name] = { geos: { body: build(lists.body), head: build(lists.head), gun: build(lists.gun), free: build(lists.free) }, mat, H,
+        neck: toM(...c.neck), gun: pv('gun'), free: pv('free'), muzzle: [mx, my, zNear(lists.gun, mx, my, 0.1)] };
+    } catch (e) { console.warn('3D model failed, using the painted card for', name, e); }
+  }
+}
+function buildModel3D(name) {
+  const m = M3D[name], g = new T.Group();
+  const part = (geo, parent, px, py, pz, tag) => { const me = new T.Mesh(geo, m.mat); me.position.set(-px, -py, -pz); me.userData.part = tag; me.userData.hitbox = true; parent.add(me); return me; };
+  part(m.geos.body, g, 0, 0, 0, 'body');
+  const head = new T.Group(); head.position.set(m.neck[0], m.neck[1], 0); g.add(head);
+  part(m.geos.head, head, m.neck[0], m.neck[1], 0, 'head');
+  const arm = (key, tag) => { const p = m[key]; const sh = new T.Group(); sh.position.set(p[0], p[1], p[2]); g.add(sh); part(m.geos[key], sh, p[0], p[1], p[2], tag); return { sh, el: new T.Group(), pivot: new T.Vector2(p[0], p[1]) }; };
+  const rightArm = arm('gun', 'armR'), leftArm = arm('free', 'armL');
+  const muzzle = new T.Object3D(); muzzle.position.set(m.muzzle[0] - m.gun[0], m.muzzle[1] - m.gun[1], m.muzzle[2] - m.gun[2]); rightArm.sh.add(muzzle);
+  const bang = new T.Sprite(new T.SpriteMaterial({ map: bangTex, depthTest: false, transparent: true }));
+  bang.scale.set(0.42, 0.42, 1); bang.position.set(0, m.H + 0.2, 0); bang.visible = false; bang.renderOrder = 5; g.add(bang);
+  return { group: g, rightArm, leftArm, hat: null, muzzle, head, bang, extra: { cutout: true, model3d: true, neckY: m.neck[1] } };
+}
 function buildCutout(name, H = 2.3) {
   const c = CUT[name], k = H / c.height;
   const g = new T.Group();
@@ -1380,7 +1454,7 @@ function buildCutout(name, H = 2.3) {
 
 // Characters: fewer draw calls, no shadows, and generous invisible hitboxes for aiming.
 function buildCharacter(kind) {
-  if (VARIANTS[kind] && VARIANTS[kind].cut) return buildCutout(VARIANTS[kind].cut);
+  if (VARIANTS[kind] && VARIANTS[kind].cut) return M3D[VARIANTS[kind].cut] ? buildModel3D(VARIANTS[kind].cut) : buildCutout(VARIANTS[kind].cut);
   const c = buildCharacterRaw(kind);
   const g = c.group;
   mergeLocal(g); mergeLocal(c.head);
@@ -1934,7 +2008,8 @@ function placeEnemy(e) {
   g.rotation.x = -e.fall - e.flinch * 0.5 + (e.slot.lean || 0) * p * (1 - e.fall);
   if (e.c.rightArm && !e.c.rightArm.gone) {
     const a = e.aim;
-    if (e.c.extra.cutout) { e.c.rightArm.sh.rotation.x = -a * 1.1; e.c.rightArm.sh.rotation.z = -0.45 * a; }
+    if (e.c.extra.model3d) { e.c.rightArm.sh.rotation.x = -a * 1.45; e.c.rightArm.sh.rotation.z = -0.1 * a; }
+    else if (e.c.extra.cutout) { e.c.rightArm.sh.rotation.x = -a * 1.1; e.c.rightArm.sh.rotation.z = -0.45 * a; }
     else { e.c.rightArm.sh.rotation.x = -a * Math.PI / 2 * 0.98; e.c.rightArm.sh.rotation.z = 0.16 * (1 - a) - 0.08 * a; }
     e.c.rightArm.el.rotation.x = -0.45 * (1 - a);
     e.c.bang.visible = a > 0.85 && e.phase === 'up' && Math.sin(time * 28) > -0.3;
