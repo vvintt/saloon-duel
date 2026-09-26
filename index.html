@@ -2649,8 +2649,15 @@ function update(dt) {
     else if (e.phase === 'leave' && e.t >= RISE_T) e.gone = true;
     else if (e.phase === 'dead') {
       e.aim = Math.max(0, e.aim - dt * 4);
-      e.fall = Math.pow(clamp(e.t / 0.45, 0, 1), 2) * 1.45;
-      e.sink = LOCS[loc].painted ? 0 : Math.max(0, e.t - 2.2) * Math.max(0, e.t - 2.2) * 6;
+      if (LOCS[loc].painted && e.slot.type !== 'door') {
+        // behind a sill, crest or cover: slump down out of sight instead of tipping over (no legs popping up)
+        const k = clamp((e.t - 0.15) / 0.9, 0, 1);
+        e.fall = clamp(e.t / 0.3, 0, 1) * 0.3;
+        e.sink = k * k * (2.3 * Math.abs(e.c.group.scale.y) + (e.lift || 0));
+      } else {
+        e.fall = Math.pow(clamp(e.t / 0.45, 0, 1), 2) * 1.45;
+        e.sink = LOCS[loc].painted ? 0 : Math.max(0, e.t - 2.2) * Math.max(0, e.t - 2.2) * 6;
+      }
       if (e.t > 3.0) e.gone = true;
     }
     placeEnemy(e);
@@ -2680,9 +2687,9 @@ const PAINTED = [
       { type: 'door', u: 467, d: 16.6, row: 622, dy: 0, hide: [-1.7, 0, 0] },
       { type: 'door', u: 930, d: 16.6, row: 622, dy: 0, hide: [1.7, 0, 0] },
       { type: 'door', u: 1395, d: 16.6, row: 622, dy: 0, hide: [1.7, 0, 0] },
-      { type: 'roof', u: 470, d: 16.7, row: 100, dy: -0.55, hide: [0, -2.7, 0] },
-      { type: 'roof', u: 1060, d: 16.7, row: 172, dy: -0.55, hide: [0, -2.7, 0] },
-      { type: 'roof', u: 1385, d: 16.7, row: 97, dy: -0.6, hide: [0, -2.7, 0] },
+      { type: 'roof', u: 470, d: 16.7, row: 100, dy: -0.68, hide: [0, -2.7, 0] },
+      { type: 'roof', u: 1060, d: 16.7, row: 172, dy: -0.68, hide: [0, -2.7, 0] },
+      { type: 'roof', u: 1385, d: 16.7, row: 97, dy: -0.82, hide: [0, -2.7, 0] },
       { type: 'cover', u: 175, d: 10.9, y: 0, top: 612, hide: [0, -2.9, 0] },
       { type: 'cover', u: 527, d: 12.3, y: 0, top: 590, hide: [0, -2.9, 0] },
       { type: 'cover', u: 1254, d: 12.9, y: 0.3, top: 538, hide: [0, -2.9, 0] },
