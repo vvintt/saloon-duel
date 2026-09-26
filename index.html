@@ -2296,7 +2296,7 @@ function update(dt) {
     e.flinch = Math.max(0, e.flinch - dt * 4);
     if (e.phase === 'rise' && e.t >= 0.34) { e.phase = 'up'; e.t = 0; }
     else if (e.phase === 'up' && state !== 'menu') {
-      if (e.c.rightArm) {
+      if (e.c.rightArm && !INNOCENT.has(e.kind)) {
         e.aim = clamp((e.t - e.fuse * 0.35) / (e.fuse * 0.5), 0, 1);
         if (e.aim > 0.15 && !e.cocked && state === 'play') { e.cocked = true; cockSound(panOf(e.c.group.position)); }
         if (e.t >= e.fuse && state === 'play') {
