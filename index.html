@@ -43,6 +43,11 @@
   .hud .label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; opacity: .8; }
   .hud .value { font-size: clamp(22px, 3.2vw, 34px); line-height: 1; font-variant-numeric: tabular-nums; }
   .hud .combo { color: var(--brass); font-size: 16px; min-height: 1.2em; }
+  .hud .loc { font-size: 13px; letter-spacing: .06em; opacity: .85; }
+  .fade { position: fixed; inset: 0; background: #0e0906; opacity: 0; pointer-events: none; transition: opacity .6s; }
+  .banner { position: fixed; left: 16px; right: 16px; top: 34%; text-align: center; pointer-events: none; font-family: var(--display); color: var(--paper); text-shadow: 0 3px 0 rgba(0,0,0,.6); opacity: 0; transition: opacity .5s; }
+  .banner b { display: block; font-weight: 400; font-size: clamp(30px, 6vw, 56px); line-height: 1.05; }
+  .banner span { display: block; margin-top: 8px; font-size: clamp(15px, 2vw, 20px); color: var(--brass); }
   .hud .center { align-items: center; text-align: center; }
   .hud .right { align-items: flex-end; text-align: right; }
   .stars { font-size: clamp(22px, 3vw, 30px); letter-spacing: 4px; color: var(--brass); }
@@ -184,6 +189,8 @@
 <div class="vignette"></div>
 <div class="hurt" id="hurt"></div>
 <div class="floats" id="floats"></div>
+<div class="fade" id="fade"></div>
+<div class="banner" id="banner"><b id="bannerTitle"></b><span id="bannerSub"></span></div>
 <div class="crosshair" id="crosshair"><div class="ring"></div><i class="tick t1"></i><i class="tick t2"></i><i class="tick t3"></i><i class="tick t4"></i></div>
 
 <div class="hud">
@@ -195,6 +202,7 @@
   <div class="block center">
     <span class="label">Раунд</span>
     <span class="value" id="level">1</span>
+    <span class="loc" id="locName">Главная улица</span>
   </div>
   <div class="block right">
     <span class="label">Жизни</span>
@@ -277,7 +285,7 @@ try { await Promise.race([Promise.all([document.fonts.load('120px "Rye"'), docum
 const QUALITY = {
   low:    { label: 'Низкая',  pr: 0.75, aa: false, shadow: 0,    dust: false, clouds: false, drops: 180 },
   medium: { label: 'Средняя', pr: 1.0,  aa: true,  shadow: 2048, dust: true,  clouds: true,  drops: 350 },
-  high:   { label: 'Высокая', pr: 1.25, aa: true,  shadow: 4096, dust: true,  clouds: true,  drops: 550 },
+  high:   { label: 'Высокая', pr: 1.5, aa: true,  shadow: 4096, dust: true,  clouds: true,  drops: 550 },
 };
 const LOWER = { high: 'medium', medium: 'low' };
 function detectQuality() {
@@ -966,6 +974,155 @@ slots.push({ type: 'cover', pos: new T.Vector3(4.4, 0, 3.45), hide: new T.Vector
   blob(13.6, 8.4, 3.5, 2, 0.8);
 }
 
+// ================= locations: street → saloon interior → canyon =================
+slots.forEach(s => { s.loc = 0; });
+const LOCS = [
+  { name: 'Главная улица', sub: 'Банда засела в окнах, дверях и на крышах', center: new T.Vector3(0, 0, 0), look: new T.Vector3(0, 3.2, 0), fitW: 13.6, minD: 14, maxD: 34, camY: d => 1.9 + (d - 14) * 0.12, quota: 8 },
+];
+function inLoc(i, fn) { const g = new T.Group(); g.position.copy(LOCS[i].center); g.userData.loc = i; scene.add(g); fn(g); g.updateMatrixWorld(true); return g; }
+const addSlot = (i, s) => { s.loc = i; s.pos.add(LOCS[i].center); slots.push(s); };
+
+// ---- saloon interior ----
+LOCS.push({ name: 'Салун «Последний шанс»', sub: 'Стреляют из-за стойки, с балкона и из-за столов', center: new T.Vector3(200, 0, 0), look: new T.Vector3(0, 2.8, -2), fitW: 9.2, minD: 9, maxD: 16, camY: d => 2.0 + (d - 9) * 0.1, quota: 8 });
+inLoc(1, g => {
+  const floorWood = woodTex({ size: 1024, rows: 12, base: [120, 84, 56] }, [4, 4]);
+  const floor = add(g, new T.BoxGeometry(22, 0.1, 20), new T.MeshStandardMaterial({ map: floorWood.map, bumpMap: floorWood.bump, bumpScale: 2, roughness: 0.7, emissive: 0xffffff, emissiveMap: floorWood.map, emissiveIntensity: 0.12 }), 0, 0.01, 2, false, true);
+  staticHits.push(floor);
+  // wallpaper
+  const [wc, wg] = cnv(256, 256);
+  wg.fillStyle = '#5c1e1a'; wg.fillRect(0, 0, 256, 256);
+  for (let x = 0; x < 256; x += 32) { wg.fillStyle = 'rgba(210,160,80,.35)'; wg.fillRect(x, 0, 3, 256); wg.fillRect(x + 8, 0, 1, 256); }
+  for (let y = 16; y < 256; y += 32) for (let x = 16; x < 256; x += 32) { wg.fillStyle = 'rgba(210,160,80,.45)'; wg.beginPath(); wg.moveTo(x, y - 7); wg.lineTo(x + 5, y); wg.lineTo(x, y + 7); wg.lineTo(x - 5, y); wg.fill(); }
+  for (let i = 0; i < 3000; i++) { wg.fillStyle = `rgba(0,0,0,${rand(0.03, 0.1)})`; wg.fillRect(rand(0, 256), rand(0, 256), 2, 2); }
+  const paperTex = toTex(wc, { repeat: [0.3, 0.3] });
+  const paper = new T.MeshStandardMaterial({ map: paperTex, roughness: 0.9, emissive: 0xffffff, emissiveMap: paperTex, emissiveIntensity: 0.18 });
+  const sideTex = toTex(wc, { repeat: [6, 2.2] });
+  const paperSide = new T.MeshStandardMaterial({ map: sideTex, roughness: 0.9, emissive: 0xffffff, emissiveMap: sideTex, emissiveIntensity: 0.14 });
+  const panel = trimMat(0x6a4028), dark = trimMat(0x3a2414);
+  // back wall with three doors on the balcony level
+  const bw = new T.Shape(); bw.moveTo(-11, 0); bw.lineTo(11, 0); bw.lineTo(11, 7.4); bw.lineTo(-11, 7.4); bw.lineTo(-11, 0);
+  const DOORS = [1.4, 4.6, 7.8];
+  DOORS.forEach(x => { const h = new T.Path(); h.moveTo(x - 0.75, 3.7); h.lineTo(x - 0.75, 6.4); h.lineTo(x + 0.75, 6.4); h.lineTo(x + 0.75, 3.7); h.lineTo(x - 0.75, 3.7); bw.holes.push(h); });
+  staticHits.push(add(g, new T.ExtrudeGeometry(bw, { depth: 0.2, bevelEnabled: false }), paper, 0, 0, -7.2, false, true));
+  staticHits.push(add(g, BOX(22, 1.3, 0.1), panel, 0, 0.65, -6.95, false, true));
+  add(g, BOX(22, 0.12, 0.16), dark, 0, 1.32, -6.9, false);
+  [-1, 1].forEach(s => {
+    staticHits.push(add(g, new T.BoxGeometry(0.2, 7.4, 20), paperSide, s * 11, 3.7, 2, false, true));
+    add(g, new T.BoxGeometry(0.12, 1.3, 20), panel, s * 10.9, 0.65, 2, false, true);
+  });
+  // windows on the left wall let the evening in
+  [-1.5, 3.5].forEach(z => {
+    add(g, BOX(0.05, 2.2, 1.6), new T.MeshBasicMaterial({ color: 0xffc98a }), -10.88, 3.2, z, false);
+    add(g, BOX(0.1, 2.4, 0.1), dark, -10.84, 3.2, z, false); add(g, BOX(0.1, 0.1, 1.8), dark, -10.84, 3.2, z, false);
+  });
+  const ceil = add(g, new T.BoxGeometry(22, 0.3, 20), dark, 0, 7.5, 2, false, false);
+  for (let x = -9; x <= 9; x += 4.5) add(g, BOX(0.35, 0.35, 20), panel, x, 7.2, 2, false);
+  // door recesses behind the balcony doors
+  const roomWood = woodTex({ size: 512, rows: 8, base: [70, 46, 32] }, [1, 1]);
+  const roomMat = new T.MeshStandardMaterial({ map: roomWood.map, side: T.BackSide, roughness: 1, emissive: 0x6a3a14, emissiveMap: roomWood.map, emissiveIntensity: 0.5 });
+  DOORS.forEach(x => {
+    staticHits.push(add(g, new T.BoxGeometry(3.6, 2.9, 1.8), roomMat, x, 3.7 + 1.45, -8.1, false, true));
+    add(g, BOX(1.8, 0.16, 0.3), dark, x, 6.48, -7.0); add(g, BOX(0.14, 2.8, 0.3), dark, x - 0.82, 5.05, -7.0); add(g, BOX(0.14, 2.8, 0.3), dark, x + 0.82, 5.05, -7.0);
+    addSlot(1, { type: 'door', pos: new T.Vector3(x, 3.7, -7.7), hide: new T.Vector3(x > 4 ? 1.6 : -1.6, 0, 0) });
+  });
+  // balcony
+  staticHits.push(add(g, new T.BoxGeometry(12.4, 0.3, 2.2), panel, 4.6, 3.55, -6.0, true, true));
+  add(g, BOX(12.4, 0.12, 0.14), dark, 4.6, 4.75, -4.95);
+  add(g, BOX(12.4, 0.1, 0.12), dark, 4.6, 3.85, -4.95);
+  for (let x = -1.5; x <= 10.7; x += 0.34) add(g, CYL(0.035, 0.035, 0.9, 6), panel, x, 4.3, -4.95);
+  [-1.5, 4.6, 10.6].forEach(x => { staticHits.push(add(g, BOX(0.28, 3.5, 0.28), dark, x, 1.75, -4.95)); });
+  // bar counter with a mirror and bottles
+  const barWood = woodTex({ size: 512, rows: 6, base: [96, 52, 30] }, [3, 1]);
+  staticHits.push(add(g, new T.BoxGeometry(6.4, 1.15, 0.8), new T.MeshStandardMaterial({ map: barWood.map, bumpMap: barWood.bump, bumpScale: 2, roughness: 0.55 }), -6, 0.575, -3.1, true, true));
+  add(g, BOX(6.7, 0.1, 1.0), trimMat(0x2a1408), -6, 1.2, -3.1);
+  add(g, CYL(0.04, 0.04, 6.4, 8), M(0xc9a04a, { metalness: 0.85, roughness: 0.3 }), -6, 0.25, -2.6).rotation.z = Math.PI / 2;
+  add(g, BOX(5.6, 2.2, 0.05), new T.MeshStandardMaterial({ color: 0x9a8a78, metalness: 0.3, roughness: 0.25, emissive: 0x3a2a1a }), -6, 3.3, -6.84, false);
+  add(g, BOX(5.9, 2.5, 0.08), trimMat(0x8a6a3a), -6, 3.3, -6.88, false);
+  [1.7, 2.3].forEach(y => {
+    add(g, BOX(6, 0.06, 0.3), dark, -6, y, -6.75);
+    for (let i = 0; i < 18; i++) add(g, CYL(0.04, 0.045, rand(0.22, 0.32), 8), M(pick([0x2f6b3a, 0x6b3a1c, 0x8a6a2a, 0x3a3a50]), { roughness: 0.2, metalness: 0.2 }), -8.8 + i * 0.33, y + 0.15, -6.75);
+  });
+  addSlot(1, { type: 'cover', pos: new T.Vector3(-7.6, 0, -3.9), hide: new T.Vector3(0, -2.9, 0) });
+  addSlot(1, { type: 'cover', pos: new T.Vector3(-4.4, 0, -3.9), hide: new T.Vector3(0, -2.9, 0) });
+  // flipped tables as cover, plus standing tables and chairs
+  const tableWood = woodTex({ size: 512, rows: 5, base: [110, 70, 40] }, [1, 1]);
+  const tMat = new T.MeshStandardMaterial({ map: tableWood.map, bumpMap: tableWood.bump, bumpScale: 1.5, roughness: 0.7 });
+  [[2.2, 1.0, 0.15], [7.0, -1.2, -0.25]].forEach(([x, z, r]) => {
+    const t = new T.Group(); t.position.set(x, 0, z); t.rotation.y = r; g.add(t);
+    staticHits.push(add(t, CYL(0.85, 0.85, 0.08, 28), tMat, 0, 0.84, 0).rotateX(Math.PI / 2));
+    add(t, CYL(0.06, 0.08, 0.8, 8), dark, 0, 0.84, -0.44).rotation.x = Math.PI / 2;
+    add(t, CYL(0.3, 0.3, 0.05, 16), dark, 0, 0.84, -0.84).rotation.x = Math.PI / 2;
+    addSlot(1, { type: 'cover', pos: new T.Vector3(x, 0, z - 0.9), hide: new T.Vector3(0, -2.9, 0) });
+  });
+  [[-3.5, 3.5], [5.5, 4.0], [-8, 2.0]].forEach(([x, z]) => {
+    add(g, CYL(0.75, 0.75, 0.07, 24), tMat, x, 0.82, z); add(g, CYL(0.07, 0.1, 0.8, 8), dark, x, 0.4, z);
+    add(g, CYL(0.035, 0.04, 0.26, 8), M(0x6b3a1c, { roughness: 0.2 }), x + 0.2, 0.99, z);
+    [[0.9, 0], [-0.9, 0.3]].forEach(([dx, rr]) => { const ch = new T.Group(); ch.position.set(x + dx, 0, z + 0.1); ch.rotation.y = rr; g.add(ch); add(ch, BOX(0.45, 0.06, 0.45), tMat, 0, 0.47, 0); add(ch, BOX(0.45, 0.6, 0.06), tMat, 0, 0.8, -0.2); [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]].forEach(([a, b]) => add(ch, BOX(0.05, 0.47, 0.05), dark, a, 0.235, b)); });
+  });
+  // piano on the right
+  add(g, BOX(1.6, 1.4, 0.7), trimMat(0x241410), 9.9, 0.7, 1.5); add(g, BOX(1.5, 0.08, 0.35), M(0xf0ead8), 9.9, 0.95, 1.95);
+  // chandeliers
+  [-4, 4].forEach(x => {
+    const ch = new T.Group(); ch.position.set(x, 6.2, 0); g.add(ch);
+    add(ch, new T.TorusGeometry(0.9, 0.05, 6, 24), M(0x3a2a1a, { metalness: 0.6 }), 0, 0, 0).rotation.x = Math.PI / 2;
+    add(ch, CYL(0.01, 0.01, 1.2, 4), M(0x222222), 0, 0.6, 0);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; add(ch, CYL(0.05, 0.05, 0.16, 8), lampMat, Math.cos(a) * 0.9, 0.12, Math.sin(a) * 0.9, false); lampGlow(ch, Math.cos(a) * 0.9, 0.2, Math.sin(a) * 0.9, 0.7); }
+  });
+});
+
+// ---- canyon ----
+LOCS.push({ name: 'Каньон Мёртвого Койота', sub: 'Банда отходит к старой шахте', center: new T.Vector3(-200, 0, 0), look: new T.Vector3(0, 3.0, -2), fitW: 13, minD: 13, maxD: 30, camY: d => 1.9 + (d - 13) * 0.12, quota: 10 });
+inLoc(2, g => {
+  const [bc, bg] = cnv(64, 512);
+  const bands = [[176, 96, 62], [196, 124, 80], [150, 80, 54], [212, 150, 104], [168, 92, 60], [120, 66, 46]];
+  for (let y = 0; y < 512;) { const h = rand(10, 46), c = pick(bands); bg.fillStyle = rgb(c[0] + rand(-10, 10), c[1] + rand(-8, 8), c[2] + rand(-6, 6)); bg.fillRect(0, y, 64, h); y += h; }
+  for (let i = 0; i < 1500; i++) { bg.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,230,200'},${rand(0.04, 0.12)})`; bg.fillRect(rand(0, 64), rand(0, 512), rand(1, 4), 1); }
+  const rockMat = new T.MeshStandardMaterial({ map: toTex(bc, { repeat: [3, 1] }), roughness: 0.95, flatShading: true });
+  const rock = (x, y, z, sx, sy, sz, seed, hit = true) => {
+    const geo = new T.IcosahedronGeometry(1, 3), p = geo.attributes.position;
+    const n = (a, b, c) => Math.sin(a * 2.1 + seed) * Math.cos(b * 1.7 + seed * 1.3) * Math.sin(c * 2.3 + seed * 0.7);
+    for (let i = 0; i < p.count; i++) { const a = p.getX(i), b = p.getY(i), c = p.getZ(i); let k = 1 + 0.16 * n(a, b, c) + 0.06 * n(a * 3.1, b * 3.1, c * 3.1); if (b > 0.55) k *= 0.96; p.setXYZ(i, a * k, Math.max(b * k, -0.6), c * k); }
+    geo.computeVertexNormals();
+    const m = add(g, geo, rockMat, x, y, z, true, true); m.scale.set(sx, sy, sz); m.rotation.y = seed;
+    if (hit) staticHits.push(m); return m;
+  };
+  rock(0, 2, -20, 26, 9, 5, 1.1, false); rock(-22, 2, -14, 10, 10, 6, 2.2, false); rock(22, 2, -15, 10, 11, 6, 3.3, false);
+  const L = rock(-15.5, 1.0, -6, 5, 4.6, 6, 4.4), Rr = rock(15, 1.0, -6, 5, 5.0, 6, 5.5);
+  const mid = rock(-5, 0.2, -9, 3.4, 2.4, 2.2, 6.6);
+  rock(-8.5, 0.1, 2.4, 1.6, 1.45, 1.2, 7.7); rock(8, 0.1, 1.8, 1.7, 1.5, 1.25, 8.8); rock(-9.8, 0.1, 3.1, 0.8, 0.7, 0.7, 9.9);
+  // mine portal in front of the back cliff
+  const mineWood = trimMat(0x5a3a22);
+  staticHits.push(add(g, new T.BoxGeometry(3.4, 3.0, 2.4), new T.MeshStandardMaterial({ color: 0x1a120c, side: T.BackSide, roughness: 1 }), 5, 1.5, -13.4, false, true));
+  add(g, BOX(0.3, 3.0, 0.3), mineWood, 3.9, 1.5, -12.2); add(g, BOX(0.3, 3.0, 0.3), mineWood, 6.1, 1.5, -12.2); add(g, BOX(2.8, 0.35, 0.35), mineWood, 5, 3.05, -12.2);
+  rock(2.2, 1.2, -13, 2.4, 3.2, 2.4, 10.1); rock(7.8, 1.2, -13, 2.4, 3.4, 2.4, 11.2); rock(5, 4.2, -13.2, 3.6, 1.6, 2.2, 12.3);
+  add(g, BOX(3.2, 0.05, 0.14), trimMat(0x4a3020), 5, 0.03, -10.6); add(g, BOX(3.2, 0.05, 0.14), trimMat(0x4a3020), 5, 0.03, -9.8);
+  const cart = new T.Group(); cart.position.set(5, 0, -10.2); g.add(cart); add(cart, BOX(1.2, 0.6, 0.9), M(0x4a4a50, { metalness: 0.6, roughness: 0.5 }), 0, 0.55, 0); [-0.4, 0.4].forEach(x => [-0.35, 0.35].forEach(z => add(cart, CYL(0.15, 0.15, 0.06, 12), M(0x222222), x, 0.18, z).rotation.x = Math.PI / 2));
+  // crates by the trail
+  const cw = new T.Group(); g.add(cw);
+  addSlot(2, { type: 'door', pos: new T.Vector3(5, 0.05, -13.1), hide: new T.Vector3(1.5, 0, 0) });
+  addSlot(2, { type: 'cover', pos: new T.Vector3(-8.5, 0, 1.6), hide: new T.Vector3(0, -2.9, 0) });
+  addSlot(2, { type: 'cover', pos: new T.Vector3(8, 0, 1.0), hide: new T.Vector3(0, -2.9, 0) });
+  addSlot(2, { type: 'cover', pos: new T.Vector3(-5, 0, -10.2), hide: new T.Vector3(0, -2.9, 0), onTop: mid });
+  addSlot(2, { type: 'roof', pos: new T.Vector3(-13.2, 0, -4.2), hide: new T.Vector3(0, -2.9, 0), onTop: L });
+  addSlot(2, { type: 'roof', pos: new T.Vector3(12.8, 0, -4.2), hide: new T.Vector3(0, -2.9, 0), onTop: Rr });
+  [[-16, 4], [16, 5], [-2, -16], [10, -9]].forEach(([x, z], i) => { const c = new T.Group(); c.position.set(x, 0, z); c.scale.setScalar(1 + i * 0.1); g.add(c); const m = M(0x5f7a45, { roughness: 0.7 }); add(c, CAP(0.24, 2.8), m, 0, 1.6, 0); const e = add(c, CAP(0.16, 0.45), m, -0.45, 1.5, 0); e.rotation.z = Math.PI / 2; add(c, CAP(0.16, 0.8), m, -0.72, 2.0, 0); });
+});
+// canyon crates (use the street crate builder, world coordinates)
+crate(-200 - 2.6, 0.5, 2.6, 1.0, 0.2); crate(-200 - 1.6, 0.45, 2.5, 0.9, -0.1); crate(-200 - 2.3, 1.3, 2.6, 0.7, 0.4);
+addSlot(2, { type: 'cover', pos: new T.Vector3(-2.1, 0, 1.7), hide: new T.Vector3(0, -2.9, 0) });
+// put ledge/rock-top slots on the actual rock surface
+{
+  const rc = new T.Raycaster();
+  slots.filter(s => s.onTop).forEach(s => {
+    s.onTop.updateMatrixWorld(true);
+    rc.set(new T.Vector3(s.pos.x, 40, s.pos.z), new T.Vector3(0, -1, 0));
+    const h = rc.intersectObject(s.onTop, false)[0];
+    s.pos.y = (h ? h.point.y : 3) - (s.type === 'roof' ? 0.35 : 1.25);
+    delete s.onTop;
+  });
+}
+let loc = 0, locKills = 0, travelT = -1, nextLoc = 0;
+
 // ================= characters =================
 function tag(obj, part) { obj.traverse(o => { if (o.isMesh) o.userData.part = part; }); return obj; }
 function cowboyHat(color, band, curl = 1.5) {
@@ -1198,9 +1355,9 @@ const VARIANTS = {
   kid:        { pts: [100, 250], fuse: 0.95, hp: 1, scale: 1.12, label: '' },
   lady:       { scale: 1.18 },
   barkeep:    { scale: 1.2 },
-  outlaw:     { pts: [100, 250], fuse: 1.0, hp: 1, scale: 1, label: '', cut: 'bandit' },
-  annie:      { pts: [150, 350], fuse: 0.8, hp: 1, scale: 0.97, label: 'Меткая Энни: ', cut: 'cowgirl' },
-  sheriff:    { scale: 1, cut: 'sheriff' },
+  outlaw:     { pts: [100, 250], fuse: 1.0, hp: 1, scale: 1.14, label: '', cut: 'bandit' },
+  annie:      { pts: [150, 350], fuse: 0.8, hp: 1, scale: 1.1, label: 'Меткая Энни: ', cut: 'cowgirl' },
+  sheriff:    { scale: 1.12, cut: 'sheriff' },
 };
 const INNOCENT = new Set(['lady', 'barkeep', 'sheriff']);
 function buildCharacterRaw(kind) {
@@ -1976,7 +2133,7 @@ function pickOutlaw() {
   return Math.random() < (level >= 2 ? 0.4 : 0.25) ? 'annie' : 'outlaw';
 }
 function spawn(forceSlot, forceKind) {
-  const free = slots.filter(s => !s.busy);
+  const free = slots.filter(s => !s.busy && s.loc === loc);
   if (!free.length) return null;
   const slot = forceSlot || pick(free);
   let kind = forceKind || pickOutlaw();
@@ -2061,7 +2218,7 @@ function shoot() {
       floatText(hit.point, 'Ещё стоит!', '#f3e3bf');
     } else {
       e.phase = 'dead'; e.t = 0;
-      hits++; kills++;
+      hits++; kills++; locKills++;
       gore(e, part, hit.point, dir);
       const pts = e.V.pts[part === 'head' ? 1 : 0] * combo;
       score += pts;
@@ -2134,6 +2291,24 @@ function hurt(fromShot = true, pan = 0) {
 
 // ================= flow =================
 function clearEnemies() { enemies.forEach(removeEnemy); enemies = []; flying.forEach(f => scene.remove(f.o)); flying.length = 0; }
+const fadeEl = $('fade'), bannerEl = $('banner');
+let bannerTimer = 0;
+function showBanner(t, sub) { $('bannerTitle').textContent = t; $('bannerSub').textContent = sub || ''; bannerEl.style.opacity = 1; clearTimeout(bannerTimer); }
+function hideBanner() { bannerEl.style.opacity = 0; }
+function setLoc(i) {
+  enemies.forEach(removeEnemy); enemies = [];
+  loc = i; locKills = 0;
+  const L = LOCS[i];
+  sun.target.position.copy(L.center); sun.position.copy(L.center).addScaledVector(SUN_DIR, 70); sun.target.updateMatrixWorld();
+  renderer.shadowMap.needsUpdate = true;
+  resize(); camera.position.copy(camBase); camera.lookAt(LOOK);
+  $('locName').textContent = L.name;
+}
+function startTravel() {
+  state = 'travel'; travelT = 0; nextLoc = (loc + 1) % LOCS.length;
+  showBanner(LOCS[loc].name + ': чисто!', 'Идём дальше: ' + LOCS[nextLoc].name);
+  setTimeout(() => { fadeEl.style.opacity = 1; }, 250);
+}
 function startGame() {
   initAudio();
   clearEnemies();
@@ -2143,6 +2318,7 @@ function startGame() {
   bottleSpots.forEach(bs => { if (!bs.mesh) placeBottle(bs); });
   score = 0; lives = 3; combo = 1; kills = 0; shots = 0; hits = 0; level = 1;
   ammo = 6; reloading = 0; spawnT = 1.4; shake = 0; hurtFx = 0;
+  if (loc !== 0) setLoc(0); locKills = 0; fadeEl.style.opacity = 0; hideBanner();
   state = 'play';
   $('startScreen').hidden = true; $('overScreen').hidden = true;
   updateHud();
@@ -2177,6 +2353,7 @@ $('againBtn').addEventListener('click', startGame);
 
 // ================= framing =================
 let camDist = 15;
+const LOOK = new T.Vector3(0, 3.2, 0);
 const camBase = new T.Vector3();
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
@@ -2184,14 +2361,15 @@ function resize() {
   camera.updateProjectionMatrix();
   const tanH = Math.tan(T.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
   camDist = clamp(13.6 / tanH, 14, 34);
-  camBase.set(0, 1.9 + (camDist - 14) * 0.12, camDist);
+  const L = LOCS[loc], d = clamp(L.fitW / tanH, L.minD, L.maxD);
+  camBase.set(L.center.x + L.look.x, L.camY(d), L.center.z + L.look.z + d);
+  LOOK.copy(L.center).add(L.look);
 }
 addEventListener('resize', resize);
 resize();
 camera.position.set(0, 5, camDist + 7);
 
 // ================= loop =================
-const LOOK = new T.Vector3(0, 3.2, 0);
 const hurtEl = $('hurt');
 const tmpV = new T.Vector3(), aimPt = new T.Vector3(), lookPt = new T.Vector3();
 function update(dt) {
@@ -2205,6 +2383,7 @@ function update(dt) {
   const menu = state === 'menu';
   const target = tmpV.copy(camBase);
   if (menu) target.set(Math.sin(time * 0.15) * 3, 3.6, camDist + 5);
+  if (state === 'travel') target.copy(camera.position);
   camera.position.lerp(target, 1 - Math.exp(-dt * (menu ? 1 : 2.5)));
   lookPt.copy(LOOK);
   camera.lookAt(lookPt);
@@ -2284,11 +2463,17 @@ function update(dt) {
   if (state === 'dying') { overT -= dt; if (overT <= 0) gameOver(); }
   if (reloading > 0) { reloading -= dt; if (reloading <= 0) { reloading = 0; ammo = 6; updateHud(); } }
 
+  if (state === 'play' && locKills >= LOCS[loc].quota && !enemies.some(e => e.phase === 'up' || e.phase === 'rise')) startTravel();
+  if (state === 'travel') {
+    travelT += dt;
+    if (travelT >= 0.75 && nextLoc !== loc) { setLoc(nextLoc); showBanner(LOCS[loc].name, LOCS[loc].sub); fadeEl.style.opacity = 0; }
+    if (travelT >= 2.4) { hideBanner(); state = 'play'; spawnT = 0.6; }
+  }
   if (state === 'play') {
     const d = difficulty();
     spawnT -= dt;
     const alive = enemies.filter(e => e.phase !== 'dead' && e.phase !== 'leave').length;
-    if (spawnT <= 0 && alive < d.max) { spawn(); spawnT = d.gap * rand(0.7, 1.3); }
+    if (spawnT <= 0 && alive < d.max && locKills < LOCS[loc].quota) { spawn(); spawnT = d.gap * rand(0.7, 1.3); }
   }
 
   for (const e of enemies) {
@@ -2333,7 +2518,8 @@ function update(dt) {
     for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(n)) g.deleteAttribute(n);
     if (!g.attributes.uv || !g.attributes.normal) return;
     g.applyMatrix4(o.matrixWorld);
-    const k = o.material.uuid + '|' + o.castShadow + '|' + o.receiveShadow;
+    let lc = 0; for (let p = o; p; p = p.parent) if (p.userData.loc !== undefined) { lc = p.userData.loc; break; }
+    const k = lc + '|' + o.material.uuid + '|' + o.castShadow + '|' + o.receiveShadow;
     if (!buckets.has(k)) buckets.set(k, { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, geos: [] });
     buckets.get(k).geos.push(g); rm.push(o);
   });
