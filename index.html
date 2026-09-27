@@ -2286,6 +2286,7 @@ function placeEnemy(e) {
   g.position.copy(e.slot.pos).addScaledVector(e.hide || e.slot.hide, 1 - p);
   if (e.lift) g.position.y += e.lift;
   g.position.y -= e.sink;
+  if (e.squash) { if (!e.baseSY) e.baseSY = g.scale.y; g.scale.y = e.baseSY * e.squash; }
   g.rotation.x = -e.fall - e.flinch * 0.5 + (e.slot.lean || 0) * p * (1 - e.fall);
   if (e.c.rightArm && !e.c.rightArm.gone) {
     const a = e.aim;
@@ -2654,8 +2655,18 @@ function update(dt) {
       if (LOCS[loc].painted && e.slot.type !== 'door') {
         // behind a sill, crest or cover: slump down out of sight instead of tipping over (no legs popping up)
         // tips over backwards, away from the camera (legs stay behind the edge), then drops out of view
-        e.fall = ease(clamp(e.t / 0.5, 0, 1)) * 1.2;
-        e.sink = Math.max(0, e.t - 0.35) ** 2 * 5;
+        if (e.slot.coverTop !== undefined) {
+          // behind a rock/crate: tipping back would slide the body sideways past the cover's edge
+          // (things further away drift toward the picture's centre), so buckle sideways and drop straight down
+          // collapse straight down: the body never leaves the cover's outline, so no hidden edges show
+          const k = clamp(e.t / 0.25, 0, 1);
+          e.fall = k * 0.08;
+          e.squash = 1 - 0.12 * k;
+          e.sink = (q => q * q * (3 - 2 * q))(clamp((e.t - 0.1) / 0.7, 0, 1)) * (2.3 * Math.abs(e.c.group.scale.y) + (e.lift || 0) + 0.2);
+        } else {
+          e.fall = ease(clamp(e.t / 0.5, 0, 1)) * 1.2;
+          e.sink = Math.max(0, e.t - 0.35) ** 2 * 5;
+        }
       } else {
         e.fall = Math.pow(clamp(e.t / 0.45, 0, 1), 2) * 1.45;
         e.sink = LOCS[loc].painted ? 0 : Math.max(0, e.t - 2.2) * Math.max(0, e.t - 2.2) * 6;
