@@ -571,7 +571,7 @@ function rimify(m) {
   m.onBeforeCompile = sh => {
     sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       float rimF = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
-      totalEmissiveRadiance += vec3(1.0, 0.88, 0.7) * pow(rimF, 3.4) * 0.5 + diffuseColor.rgb * 0.16;`);
+      totalEmissiveRadiance += (vec3(1.0, 0.88, 0.7) * pow(rimF, 3.4) * 0.5 + diffuseColor.rgb * 0.16) * diffuse.g;`);
   };
   m.customProgramCacheKey = () => 'rim';
   return m;
@@ -1599,7 +1599,7 @@ function inPoly(x, y, poly) {
         sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 projUv; varying vec2 vProjUv; varying float vFront;')
           .replace('#include <begin_vertex>', '#include <begin_vertex>\nvProjUv = projUv; vFront = smoothstep(0.1, 0.5, normal.z);');
         sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D projMap; varying vec2 vProjUv; varying float vFront;')
-          .replace('#include <map_fragment>', '#include <map_fragment>\nvec4 pj = texture2D(projMap, vProjUv); diffuseColor.rgb = mix(diffuseColor.rgb, pj.rgb, smoothstep(0.35, 0.9, pj.a) * vFront);')
+          .replace('#include <map_fragment>', '#include <map_fragment>\nvec4 pj = texture2D(projMap, vProjUv); diffuseColor.rgb = mix(diffuseColor.rgb, pj.rgb * diffuse, smoothstep(0.35, 0.9, pj.a) * vFront);')
           .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 0.24;');
       };
       mat.customProgramCacheKey = () => 'proj-' + name;
@@ -2391,13 +2391,14 @@ function spawn(forceSlot, forceKind) {
   if (painted && slot.type !== 'door') e.pivotH = slot.edge;
   // in painted sets people walk out of the doorway from the dark room behind, pushing the batwing doors open
   if (painted && slot.type === 'door') {
-    e.hide = new T.Vector3(0, 0, -2.3); e.riseT = 0.95;
+    const deep = slot.pos.z < -17; // the mine tunnel is long and lit: walk out from far inside
+    e.hide = new T.Vector3(0, 0, deep ? -6 : -2.3); e.riseT = deep ? 1.6 : 0.95;
     // own material copies so the figure can step out of the dark room gradually instead of popping in lit
     const cache = new Map(); e.mats = [];
     e.meshes.forEach(m => {
       if (!cache.has(m.material)) {
         const o = m.material, cl = o.clone(); cl.onBeforeCompile = o.onBeforeCompile; cl.customProgramCacheKey = o.customProgramCacheKey;
-        cl.userData.base = { color: o.color.clone(), ei: o.emissiveIntensity };
+        cl.userData.base = { color: o.color.clone(), ei: o.emissiveIntensity }; cl.transparent = true;
         cache.set(o, cl); e.mats.push(cl);
       }
       m.material = cache.get(m.material);
@@ -2431,7 +2432,8 @@ function placeEnemy(e) {
   if (e.lift) g.position.y += e.lift;
   if (e.mats) {
     const lit = e.phase === 'rise' || e.phase === 'leave' ? 0.08 + 0.92 * p * p : 1;
-    e.mats.forEach(m => { m.color.copy(m.userData.base.color).multiplyScalar(lit); m.emissiveIntensity = m.userData.base.ei * lit; });
+    const op = e.phase === 'rise' || e.phase === 'leave' ? clamp(p / 0.35, 0, 1) : 1;
+    e.mats.forEach(m => { m.color.copy(m.userData.base.color).multiplyScalar(lit); m.emissiveIntensity = m.userData.base.ei * lit; m.opacity = op; m.depthWrite = op > 0.98; });
   }
   const walking = e.riseT && p > 0 && p < 1 && e.phase !== 'dead';
   if (walking) { g.position.y += Math.abs(Math.sin(e.t * 9)) * 0.045; g.rotation.z += Math.sin(e.t * 9) * 0.025; }
