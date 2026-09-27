@@ -1944,6 +1944,9 @@ const dropList = [];
 function emitBlood(pos, dir, n, speed, spread, size = 1) {
   for (let i = 0; i < n && dropList.length < DROP_MAX; i++) {
     const v = new T.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(spread).add(dir).normalize().multiplyScalar(speed * rand(0.3, 1.15));
+    // drops must not fly into the lens (they'd show up as huge red balls): fold any camera-bound part away
+    const tc = _q.copy(camera.position).sub(pos).normalize(), k = v.dot(tc);
+    if (k > 0) v.addScaledVector(tc, -1.6 * k);
     dropList.push({ p: pos.clone(), v, r: rand(0.01, 0.03) * size, life: 0 });
   }
 }
@@ -2375,7 +2378,8 @@ function spawn(forceSlot, forceKind) {
   // painted sets are drawn to real scale: people ~1.9 m (doors ~2.7 m, windows ~1.5 m)
   const sc = painted ? 2.0 / 2.3 * (V.scale / 1.14) : V.scale;
   c.group.scale.setScalar(sc * (slot.scale || 1));
-  if (c.extra.cutout && Math.random() < 0.5) c.group.scale.x *= -1;
+  // mirroring flips a 3D model inside out (dark, wrong-looking lighting), so only flat cards are mirrored
+  if (c.extra.cutout && !c.extra.model3d && Math.random() < 0.5) c.group.scale.x *= -1;
   scene.add(c.group);
   const face = Math.atan2(camera.position.x - slot.pos.x, camera.position.z - slot.pos.z);
   c.group.rotation.y = c.extra.cutout ? face : face * (slot.type === 'door' ? 0.6 : 0.85);
