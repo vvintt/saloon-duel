@@ -269,6 +269,7 @@
 <script src="assets/cutouts.js"></script>
 <script src="assets/models.js"></script>
 <script src="assets/painted.js"></script>
+<script src="assets/sfx.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -2142,20 +2143,54 @@ bottleSpots.forEach(placeBottle);
 // ================= audio =================
 let ac = null, noiseBuf = null;
 function initAudio() {
-  if (ac) { ac.resume(); return; }
+  if (ac) { ac.resume(); loadSfx(); return; }
   try {
     ac = new (window.AudioContext || window.webkitAudioContext)();
     noiseBuf = ac.createBuffer(1, ac.sampleRate * 1.2, ac.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   } catch (e) { ac = null; }
+  loadSfx();
 }
 function out(pan = 0) {
   if (!ac.createStereoPanner) return ac.destination;
   const p = ac.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); p.connect(ac.destination); return p;
 }
+// Recorded revolver shots (CC0, freesound.org, see assets/sfx/CREDITS.txt), decoded on the first click.
+const SFXB = {};
+function loadSfx() {
+  if (!ac || SFXB.loading) return; SFXB.loading = true;
+  Object.entries(window.SFX || {}).forEach(([k, b64]) => {
+    const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    ac.decodeAudioData(u8.buffer).then(buf => { SFXB[k] = buf; }).catch(() => {});
+  });
+}
+function playSample(names, vol = 1, pan = 0, rate = 1, lowpass = 0) {
+  const avail = names.filter(n => SFXB[n]);
+  if (!ac || !avail.length) return false;
+  const src = ac.createBufferSource(); src.buffer = SFXB[pick(avail)];
+  src.playbackRate.value = rate * rand(0.96, 1.04);
+  const g = ac.createGain(); g.gain.value = vol;
+  let node = src;
+  if (lowpass) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; node.connect(f); node = f; }
+  node.connect(g).connect(out(pan)); src.start();
+  return true;
+}
 function gunSound(vol = 1, cutoff = 2800, pan = 0) {
   if (!ac) return;
+  const mine = cutoff >= 2800;
+  if (mine ? playSample(['shot1', 'shot2', 'shot3', 'shot4', 'shot5'], 0.95 * vol, pan) : playSample(['enemy1', 'enemy2', 'enemy3'], 0.7 * vol, pan, 0.94, 5200)) {
+    // body and street echo under the recorded crack
+    const t = ac.currentTime, dst = out(pan);
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.18);
+    const og = ac.createGain(); og.gain.setValueAtTime((mine ? 0.55 : 0.3) * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(og).connect(dst); o.start(t); o.stop(t + 0.25);
+    const e = ac.createBufferSource(); e.buffer = noiseBuf;
+    const ef = ac.createBiquadFilter(); ef.type = 'bandpass'; ef.frequency.value = 520; ef.Q.value = 0.7;
+    const eg = ac.createGain(); eg.gain.setValueAtTime(0.0001, t + 0.1); eg.gain.linearRampToValueAtTime(0.12 * vol, t + 0.15); eg.gain.exponentialRampToValueAtTime(0.001, t + 1.3);
+    e.connect(ef).connect(eg).connect(dst); e.start(t); e.stop(t + 1.35);
+    return;
+  }
   const t = ac.currentTime, dst = out(pan);
   const n = ac.createBufferSource(); n.buffer = noiseBuf;
   const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(cutoff, t); f.frequency.exponentialRampToValueAtTime(200, t + 0.6);
@@ -2199,7 +2234,7 @@ function glassSound(pan = 0) {
     o.connect(g).connect(out(pan)); o.start(t); o.stop(t + 0.32);
   }
 }
-function cockSound(pan) { tick(1300, 0, 0.12, pan); tick(2100, 0.07, 0.1, pan); }
+function cockSound(pan) { if (playSample(['cock'], 0.55, pan)) return; tick(1300, 0, 0.12, pan); tick(2100, 0.07, 0.1, pan); }
 
 // ================= music: Suno track, two players crossfading so the loop never stops =================
 const MUSIC_VOL = 0.4, XFADE = 4;

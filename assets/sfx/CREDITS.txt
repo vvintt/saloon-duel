@@ -1,0 +1,4 @@
+All sounds CC0 (public domain) from freesound.org:
+shot1-4, enemy1-3: "Weapon_Revolver_Shots_Stereo.wav" by Nox_Sound (freesound.org/s/541818)
+shot5: "357 Magnum Revolver Gunshot" by Shark_Anthony (freesound.org/s/683186)
+cock: "revolvercock1.wav" by Dredile (freesound.org/s/111676)
