@@ -3,3 +3,4 @@ enemy1-3: "Weapon_Revolver_Shots_Stereo.wav" by Nox_Sound (freesound.org/s/54181
 cock: "revolvercock1.wav" by Dredile (freesound.org/s/111676, CC0)
 reload: "revolver-cylinder" (file provided by the project owner)
 splat, leak, drops: blood-splatters / leaking-blood-from-the-intestines / drops-of-blood-splashing (files provided by the project owner)
+groan1-8: "11e501168c5b5bd.mp3" (file provided by the project owner)
