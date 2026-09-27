@@ -2794,16 +2794,17 @@ const PAINTED = [
   { key: 'street', name: 'Главная улица', sub: 'Банда засела в окнах, дверях и на крышах', quota: 8, h: 3.38, x: 1000,
     // batwing doors cut out of the painting so they can swing: opening, leaf rects [x0, x1, y0, y1], hinge side
     swing: [
-      { hole: rectP(420, 450, 515, 622), leaves: [[424, 464, 500, 580, 'L'], [464, 506, 500, 580, 'R']] },
-      { hole: rectP(888, 452, 996, 620), leaves: [[898, 947, 499, 575, 'L'], [947, 996, 499, 575, 'R']] },
-      { hole: rectP(1350, 455, 1440, 622), leaves: [[1350, 1398, 500, 577, 'L'], [1398, 1446, 500, 577, 'R']] },
+      // door box [x0, split, x1, y0, y1] measured on the painting; exact leaf outlines are traced from its pixels
+      { hole: rectP(420, 450, 515, 622), box: [429, 468, 509, 496, 579] },
+      { hole: rectP(888, 452, 996, 620), box: [892, 930, 977, 494, 579] },
+      { hole: rectP(1350, 455, 1440, 622), box: [1355, 1390, 1438, 496, 579] },
     ],
     layers: [
       { d: 70, far: true },
       { d: 16, polys: [[[0, 30], [250, 78], [250, 125], [340, 125], [340, 100], [600, 100], [600, 125], [655, 125], [690, 160], [715, 170], [850, 170], [850, 148], [1000, 148], [1000, 170], [1140, 170], [1140, 200], [1160, 200], [1160, 145], [1300, 145], [1385, 95], [1470, 145], [1600, 145], [1600, 190], [1690, 190], [1690, 140], [1870, 60], [1870, 841], [0, 841]]],
         holes: [rectP(320, 285, 408, 380), rectP(515, 285, 598, 380), rectP(780, 285, 875, 385), rectP(970, 285, 1060, 385), rectP(1235, 285, 1335, 385), rectP(1440, 285, 1525, 385), rectP(420, 450, 515, 622), rectP(888, 452, 996, 620), rectP(1350, 455, 1440, 622)] },
       // bank hitching rail with its bottle, in front of the doorway
-      { d: 15.8, polys: [rectP(836, 574, 1034, 593), rectP(953, 540, 968, 576)] },
+      { d: 15.8, polys: [rectP(836, 574, 1034, 593), rectP(948, 536, 972, 578)] },
       { d: 10.4, polys: [[[0, 615], [90, 603], [200, 612], [285, 638], [302, 700], [272, 757], [0, 762]]] },
       { d: 11.8, polys: [[[440, 600], [470, 588], [612, 590], [617, 700], [602, 720], [443, 721]]] },
       { d: 12.4, polys: [[[1176, 598], [1208, 598], [1208, 536], [1300, 536], [1300, 598], [1400, 600], [1400, 702], [1178, 706]]] },
@@ -2925,33 +2926,54 @@ function kickDoor(li, x, strength) {
     gnd.rotation.x = -Math.PI / 2; gnd.position.set(P.x, 0, -60); gnd.renderOrder = -1; gnd.userData.dynamic = true;
     scene.add(gnd); staticHits.push(gnd);
     for (const sw of P.swing || []) {
-      // interior behind the doorway: the painting with the leaves painted out
       const DI = 19, DL = 16.85;
+      const [bx0, bsp, bx1, by0, by1] = sw.box;
       const [ic, ig] = cnv(PW, PH); ig.drawImage(img, 0, 0);
-      for (const [x0, x1, y0, y1] of sw.leaves) {
-        const gr = ig.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, '#1d130d'); gr.addColorStop(1, '#2c1d13');
-        ig.fillStyle = gr; ig.fillRect(x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4);
+      const src = ig.getImageData(0, 0, PW, PH), sd = src.data;
+      const lum = (x, y) => { const i = (y * PW + x) * 4; return 0.3 * sd[i] + 0.59 * sd[i + 1] + 0.11 * sd[i + 2]; };
+      // trace each leaf: per row, from the first to the last lit-wood pixel inside its half of the box
+      const leafMask = [new Uint8Array(PW * PH), new Uint8Array(PW * PH)];
+      [[bx0, bsp], [bsp + 1, bx1]].forEach(([a0, a1], li) => {
+        for (let y = by0; y <= by1; y++) {
+          let f = -1, l = -1;
+          for (let x = a0; x <= a1; x++) if (lum(x, y) > 40) { if (f < 0) f = x; l = x; }
+          if (f >= 0 && l - f > 6) for (let x = f; x <= l; x++) leafMask[li][y * PW + x] = 1;
+        }
+      });
+      // paint the leaves out of the interior picture: each column fades from the dark room above to the floor below
+      const out = ig.createImageData(PW, PH); out.data.set(sd);
+      for (let x = bx0 - 1; x <= bx1 + 1; x++) {
+        const top = ((by0 - 6) * PW + x) * 4, bot = ((by1 + 6) * PW + x) * 4;
+        for (let y = by0 - 1; y <= by1 + 1; y++) {
+          let hit = false; for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = leafMask[0][(y + dy) * PW + x + dx] || leafMask[1][(y + dy) * PW + x + dx];
+          if (!hit) continue;
+          const k = (y - by0) / (by1 - by0), o = (y * PW + x) * 4;
+          for (let c = 0; c < 3; c++) out.data[o + c] = (sd[top + c] * (1 - k) + sd[bot + c] * k) * 0.8;
+        }
       }
+      ig.putImageData(out, 0, 0);
       const itex = new T.CanvasTexture(ic); itex.colorSpace = T.SRGBColorSpace;
       const [mc, mg] = cnv(PW / 2, PH / 2); mg.fillStyle = '#000'; mg.fillRect(0, 0, PW / 2, PH / 2); mg.fillStyle = '#fff';
       mg.beginPath(); sw.hole.forEach(([x, y], i) => mg[i ? 'lineTo' : 'moveTo'](x / 2, y / 2)); mg.closePath(); mg.fill();
       const inner = new T.Mesh(new T.PlaneGeometry(PW * DI / PF, PH * DI / PF), new T.MeshBasicMaterial({ map: itex, alphaMap: new T.CanvasTexture(mc), alphaTest: 0.5, toneMapped: false, fog: false }));
       inner.position.set(P.x, P.h, -DI); inner.userData.dynamic = true; scene.add(inner);
       sw.parts = [];
-      for (const [x0, x1, y0, y1, side] of sw.leaves) {
-        const [lc, lg] = cnv(PW, PH); lg.fillStyle = '#000'; lg.fillRect(0, 0, PW, PH); lg.fillStyle = '#fff'; lg.fillRect(x0, y0, x1 - x0, y1 - y0);
-        const hx = side === 'L' ? x0 : x1, px = P.x + (hx - PCX) * DL / PF;
+      [['L', bx0], ['R', bx1]].forEach(([side, hx], li) => {
+        const [lc, lg] = cnv(PW, PH), md = lg.createImageData(PW, PH);
+        for (let i = 0; i < PW * PH; i++) { const v = leafMask[li][i] ? 255 : 0; md.data[i * 4] = md.data[i * 4 + 1] = md.data[i * 4 + 2] = v; md.data[i * 4 + 3] = 255; }
+        lg.putImageData(md, 0, 0);
+        const px = P.x + (hx - PCX) * DL / PF;
         const pivot = new T.Group(); pivot.position.set(px, 0, -DL); pivot.userData.dynamic = true; scene.add(pivot);
         const leaf = new T.Mesh(new T.PlaneGeometry(PW * DL / PF, PH * DL / PF), new T.MeshBasicMaterial({ map: tex, alphaMap: new T.CanvasTexture(lc), alphaTest: 0.5, side: T.DoubleSide, toneMapped: false, fog: false }));
         leaf.position.set(P.x - px, P.h, 0); pivot.add(leaf);
-        const a = new Uint8Array((PW >> 2) * (PH >> 2)); // coarse mask for bullet hits
-        for (let y = y0 >> 2; y < y1 >> 2; y++) for (let x = x0 >> 2; x < x1 >> 2; x++) a[y * (PW >> 2) + x] = 255;
+        const a = new Uint8Array((PW >> 2) * (PH >> 2));
+        for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) if (leafMask[li][y * PW + x]) a[(y >> 2) * (PW >> 2) + (x >> 2)] = 255;
         leaf.userData.mask = { a, w: PW >> 2, h: PH >> 2 };
         leaf.userData.leaf = { pivot, sign: side === 'L' ? 1 : -1, ang: 0, vel: 0 };
         SWING_LEAVES.push(leaf.userData.leaf); LEAF_MESHES.push(leaf);
         sw.parts.push(leaf.userData.leaf);
-      }
-      sw.u = (sw.hole[0][0] + sw.hole[1][0]) / 2; sw.loc = li; SWING_DOORS.push(sw);
+      });
+      sw.u = (bx0 + bx1) / 2; sw.loc = li; SWING_DOORS.push(sw);
     }
     for (const s of P.slots) {
       const y = s.y !== undefined ? s.y : P.h - (s.row - PCY) * s.d / PF + s.dy;
