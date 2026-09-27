@@ -2179,7 +2179,8 @@ function playSample(names, vol = 1, pan = 0, rate = 1, lowpass = 0) {
 function gunSound(vol = 1, cutoff = 2800, pan = 0) {
   if (!ac) return;
   const mine = cutoff >= 2800;
-  if (mine ? playSample(['shot1', 'shot2', 'shot3', 'shot4', 'shot5'], 0.95 * vol, pan) : playSample(['enemy1', 'enemy2', 'enemy3'], 0.7 * vol, pan, 0.94, 5200)) {
+  if (mine && playSample(['pistol'], 1.0 * vol, pan)) return; // the recording carries its own body and tail
+  if (!mine && playSample(['enemy1', 'enemy2', 'enemy3'], 0.7 * vol, pan, 0.94, 5200)) {
     // body and street echo under the recorded crack
     const t = ac.currentTime, dst = out(pan);
     const o = ac.createOscillator(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.18);
