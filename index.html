@@ -1565,13 +1565,17 @@ function inPoly(x, y, poly) {
         }
         geo.setAttribute('projUv', new T.BufferAttribute(uv2, 2)); }
       const pos = geo.attributes.position, names = Object.keys(geo.attributes);
-      const lists = { body: [], head: [], gun: [], free: [] };
+      const lists = { body: [], head: [], gun: [], free: [], thighL: [], shinL: [], thighR: [], shinR: [] };
+      // legs (measured on each picture): inseam x, crotch and knee heights; left/right are the picture's sides
+      const LG = { bandit: [540, 900, 1120], sheriff: [512, 840, 1100], gunman: [530, 850, 1085] }[name];
       // the 3D arm is a little fatter than its outline in the picture: grow the outlines ~14 px
       const grow = poly => { const cx = poly.reduce((q, p) => q + p[0], 0) / poly.length, cy = poly.reduce((q, p) => q + p[1], 0) / poly.length; return poly.map(([x, y]) => { const d = Math.hypot(x - cx, y - cy) || 1; return [x + (x - cx) / d * 14, y + (y - cy) / d * 14]; }); };
       const gunP = grow(c.polys.gun), freeP = grow(c.polys.free);
       for (let t = 0; t < pos.count; t += 3) {
         const [ix, iy] = toImg((pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3, (pos.getY(t) + pos.getY(t + 1) + pos.getY(t + 2)) / 3);
-        lists[inPoly(ix, iy, gunP) ? 'gun' : inPoly(ix, iy, freeP) ? 'free' : iy < c.head_cut ? 'head' : 'body'].push(t);
+        let key = inPoly(ix, iy, gunP) ? 'gun' : inPoly(ix, iy, freeP) ? 'free' : iy < c.head_cut ? 'head' : 'body';
+        if (key === 'body' && LG && iy > LG[1]) key = (ix < LG[0] ? 'L' : 'R') === 'L' ? (iy > LG[2] ? 'shinL' : 'thighL') : (iy > LG[2] ? 'shinR' : 'thighR');
+        lists[key].push(t);
       }
       const build = list => {
         const g = new T.BufferGeometry();
@@ -1599,7 +1603,12 @@ function inPoly(x, y, poly) {
           .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 0.24;');
       };
       mat.customProgramCacheKey = () => 'proj-' + name;
-      M3D[name] = { geos: { body: build(lists.body), head: build(lists.head), gun: build(lists.gun), free: build(lists.free) }, mat, H,
+      const legs = LG && lists.thighL.length && lists.thighR.length ? ['L', 'R'].map(sd => {
+        const [hx, hy] = toM(LG[0] + (sd === 'L' ? -70 : 70), LG[1] - 30), [kx, ky] = toM(LG[0] + (sd === 'L' ? -95 : 95), LG[2]);
+        return { hip: [hx, hy, zNear(lists['thigh' + sd], hx, hy, 0.25)], knee: [kx, ky, zNear(lists['shin' + sd], kx, ky, 0.2)],
+          thigh: build(lists['thigh' + sd]), shin: build(lists['shin' + sd]) };
+      }) : null;
+      M3D[name] = { legs, geos: { body: build(lists.body), head: build(lists.head), gun: build(lists.gun), free: build(lists.free) }, mat, H,
         neck: toM(...c.neck), gun: pv('gun'), free: pv('free'), muzzle: [mx, my, zNear(lists.gun, mx, my, 0.1)] };
     } catch (e) { console.warn('3D model failed, using the painted card for', name, e); }
   }
@@ -1698,9 +1707,17 @@ function buildModel3D(name) {
   const arm = (key, tag) => { const p = m[key]; const sh = new T.Group(); sh.position.set(p[0], p[1], p[2]); g.add(sh); part(m.geos[key], sh, p[0], p[1], p[2], tag); return { sh, el: new T.Group(), pivot: new T.Vector2(p[0], p[1]) }; };
   const rightArm = arm('gun', 'armR'), leftArm = arm('free', 'armL');
   const muzzle = new T.Object3D(); muzzle.position.set(m.muzzle[0] - m.gun[0], m.muzzle[1] - m.gun[1], m.muzzle[2] - m.gun[2]); rightArm.sh.add(muzzle);
+  // legs: hip joint → thigh, knee joint → shin (for the walk cycle)
+  const legs = (m.legs || []).map(L => {
+    const hip = new T.Group(); hip.position.set(...L.hip); g.add(hip);
+    part(L.thigh, hip, ...L.hip, 'body');
+    const knee = new T.Group(); knee.position.set(L.knee[0] - L.hip[0], L.knee[1] - L.hip[1], L.knee[2] - L.hip[2]); hip.add(knee);
+    part(L.shin, knee, ...L.knee, 'body');
+    return { hip, knee };
+  });
   const bang = new T.Sprite(new T.SpriteMaterial({ map: bangTex, depthTest: false, transparent: true }));
   bang.scale.set(0.42, 0.42, 1); bang.position.set(0, m.H + 0.2, 0); bang.visible = false; bang.renderOrder = 5; g.add(bang);
-  return { group: g, rightArm, leftArm, hat: null, muzzle, head, bang, extra: { cutout: true, model3d: true, neckY: m.neck[1] } };
+  return { group: g, rightArm, leftArm, legs, hat: null, muzzle, head, bang, extra: { cutout: true, model3d: true, neckY: m.neck[1] } };
 }
 function buildCutout(name, H = 2.3) {
   const c = CUT[name], k = H / c.height;
@@ -2380,7 +2397,18 @@ function placeEnemy(e) {
   const g = e.c.group;
   g.position.copy(e.slot.pos).addScaledVector(e.hide || e.slot.hide, 1 - p);
   if (e.lift) g.position.y += e.lift;
-  if (e.riseT && p > 0 && p < 1) { g.position.y += Math.abs(Math.sin(e.t * 13)) * 0.05; g.rotation.z += Math.sin(e.t * 13) * 0.03; }
+  const walking = e.riseT && p > 0 && p < 1 && e.phase !== 'dead';
+  if (walking) { g.position.y += Math.abs(Math.sin(e.t * 9)) * 0.045; g.rotation.z += Math.sin(e.t * 9) * 0.025; }
+  if (e.c.legs && e.c.legs.length) {
+    // walk cycle: thighs swing opposite each other, the knee folds while its leg swings back
+    const w = e.t * 9, amp = walking ? 0.5 : 0;
+    e.c.legs.forEach((L, i) => {
+      const ph = Math.sin(w + i * Math.PI) * amp;
+      L.hip.rotation.x = lerp(L.hip.rotation.x, e.phase === 'leave' ? ph : -ph, 0.5);
+      L.knee.rotation.x = lerp(L.knee.rotation.x, walking ? Math.max(0, Math.sin(w + i * Math.PI + 0.9)) * 0.9 : 0, 0.5);
+    });
+    if (walking && e.c.leftArm && !e.c.leftArm.gone) e.c.leftArm.sh.rotation.x = Math.sin(w) * 0.35;
+  }
   g.position.y -= e.sink;
   if (e.squash) { if (!e.baseSY) e.baseSY = g.scale.y; g.scale.y = e.baseSY * e.squash; }
   g.rotation.x = -e.fall - e.flinch * 0.5 + (e.slot.lean || 0) * p * (1 - e.fall);
@@ -2755,6 +2783,8 @@ function update(dt) {
     e.flinch = Math.max(0, e.flinch - dt * 4);
     if (e.phase === 'rise' && e.riseT && !e.doorOpened && e.t > e.riseT * 0.35) { e.doorOpened = true; kickDoor(loc, e.slot.pos.x, -7); }
     if (e.phase === 'leave' && e.riseT && !e.doorOpened2 && e.t > e.riseT * 0.5) { e.doorOpened2 = true; kickDoor(loc, e.slot.pos.x, 6); }
+    if (e.riseT && e.phase === 'rise' && e.t > e.riseT * 0.4 && e.t < e.riseT * 0.95) holdDoor(loc, e.slot.pos.x, -1);
+    if (e.riseT && e.phase === 'leave' && e.t > e.riseT * 0.45 && e.t < e.riseT * 0.95) holdDoor(loc, e.slot.pos.x, 1);
     if (e.phase === 'rise' && e.t >= (e.riseT || RISE_T)) { e.phase = 'up'; e.t = 0; }
     else if (e.phase === 'up' && state !== 'menu') {
       if (e.c.rightArm && !INNOCENT.has(e.kind)) {
@@ -2885,6 +2915,14 @@ const PAINTED = [
 const PLAYLIST = [];
 const SWING_LEAVES = [], LEAF_MESHES = [], SWING_DOORS = [];
 // push both leaves of the batwing door nearest to world x (inward = away from the camera)
+// keep the leaves swung open while someone is passing through (they can't close on a body)
+function holdDoor(li, x, dirSign) {
+  const P = LOCS[li]; if (!P || !P.painted) return;
+  for (const sw of SWING_DOORS) {
+    if (sw.loc !== li || Math.abs(P.center.x + (sw.u - PCX) * 16.6 / PF - x) > 1.2) continue;
+    sw.parts.forEach(l => { if (dirSign < 0 ? l.ang > -1.05 : l.ang < 1.05) { l.ang = dirSign * 1.05; l.vel = 0; } });
+  }
+}
 function kickDoor(li, x, strength) {
   const P = LOCS[li]; if (!P || !P.painted) return;
   let best = null, bd = 1e9;
