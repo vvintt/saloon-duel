@@ -245,7 +245,7 @@
       <li><b>В голову</b><span>больше денег, серия умножает до ×5</span></li>
       <li><b>Бандит</b><span>в красном платке, $100 / $250 в голову</span></li>
       <li><b>Бородач Хэнк</b><span>стреляет быстрее, $150 / $350</span></li>
-      <li><b>Бутылки</b><span>на коновязях, +$50 за каждую</span></li>
+      <li><b>Бутылки</b><span>на коновязях и полках бара, +$50 за каждую</span></li>
       <li><b>Шериф</b><span>с поднятыми руками — свой. Попадёшь — минус жизнь</span></li>
     </ul>
     <div class="quality" id="quality" role="group" aria-label="Качество графики">
@@ -287,6 +287,162 @@
 import * as T from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { computeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+// surface marks (inlined from assets/impacts.js so the game also runs from file://)
+// Surface-bound marks for the three painted locations. Coordinates refer to the
+// original 1870 × 841 paintings, so changing viewport size keeps the same material.
+const rect = (x0, y0, x1, y1) => [[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+function insidePolygon(x, y, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [ax,ay] = polygon[i], [bx,by] = polygon[j];
+    if ((ay > y) !== (by > y) && x < (bx-ax)*(y-ay)/(by-ay)+ax) inside = !inside;
+  }
+  return inside;
+}
+const region = (kind, polygon) => ({kind, polygon});
+function paintedSurface(location, layer = {}) {
+  const surface = { location, kind: 'wood', regions: [] };
+  if (location === 'street') {
+    if (layer.d === 10.4) surface.kind = 'dirt'; // hay bales
+    if (layer.d === 16) surface.regions = [
+      region('wood',rect(790,208,1060,264)), // bank sign
+      region('wood',rect(710,392,1150,436)), // porch beam
+      ...[[751,274,783,395],[876,273,900,395],[952,275,978,395],[1059,275,1088,395],[853,436,889,625],[978,436,1006,625]].map(r=>region('wood',rect(...r))),
+      region('stone',rect(713,169,1140,630)),
+      region('dirt',rect(0,674,1870,841)),
+    ];
+    if (layer.d === 11.8) surface.regions = [616,648,699].map(y=>region('metal',rect(438,y-4,617,y+4)));
+  } else if (location === 'saloon') {
+    if (layer.d === 11.5) surface.regions = [
+      region('glass',[[385,345],[473,326],[680,328],[755,348],[753,450],[383,450]]),
+      region('wood',rect(410,209,741,288)),
+      ...[[265,120,800,310],[873,119,948,248],[1095,120,1160,248],[1307,120,1372,248],[1515,122,1630,248],[880,399,1242,510],[1295,399,1617,510]].map(r=>region('plaster',rect(...r))),
+      region('metal',[[300,6],[566,6],[569,80],[482,99],[370,98],[302,72]]),
+      region('metal',[[1265,3],[1487,3],[1518,74],[1435,107],[1321,98],[1259,68]]),
+    ];
+    if (layer.d === 5.59) surface.regions = [region('metal',[[1280,652],[1382,623],[1386,643],[1280,674]])];
+    if (layer.d === 7.33) surface.regions = [region('metal',rect(1725,585,1794,607))];
+  } else if (location === 'canyon') {
+    surface.kind = layer.d === 8.9 || layer.d === 15.5 ? 'wood' : 'stone';
+    if (layer.d === 18.5) surface.regions = [
+      region('wood',rect(1000,363,1268,399)),
+      region('wood',rect(1027,393,1064,555)),
+      region('wood',rect(1210,395,1248,552)),
+    ];
+    if (layer.d === 15.5) surface.regions = [
+      region('metal',rect(1160,557,1290,590)),
+      region('metal',rect(1207,513,1222,562)),
+      region('metal',rect(1267,513,1280,566)),
+    ];
+  }
+  return surface;
+}
+function surfaceAt(hit) {
+  const o = hit.object, s = o.userData.surface;
+  if (s) {
+    if (hit.uv && s.regions) {
+      const x = hit.uv.x * 1870, y = (1-hit.uv.y)*841;
+      const r = s.regions.find(r=>insidePolygon(x,y,r.polygon));
+      if (r) return r.kind;
+    }
+    return s.kind;
+  }
+  if (o.userData.leaf) return 'wood';
+  if (o.userData.glass) return 'glass';
+  return o.material?.metalness > 0.6 ? 'metal' : 'wood';
+}
+
+function createImpactMarks(T, limit = 140) {
+  const marks = [], textures = new Map(), surfaceMaterials = new WeakMap();
+  const profile = {
+    wood: {size:0.21, dust:0xbfa075}, stone: {size:0.25, dust:0xcbaf91},
+    metal:{size:0.16, dust:0xaca99e}, plaster:{size:0.25, dust:0xe0c7a2},
+    glass:{size:0.33, dust:0xc8d9d8}, dirt:{size:0.24, dust:0xc6a078},
+  };
+  function texture(kind, location, variant) {
+    const key = `${kind}-${location}-${variant}`;
+    if (textures.has(key)) return textures.get(key);
+    let seed = 1729 + variant * 971;
+    const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+    const g = canvas.getContext('2d'); g.translate(64,64);
+    const polygon = (radius, n, color, stretch = 1) => {
+      g.beginPath();
+      for (let i=0;i<n;i++) {const a=i/n*Math.PI*2,r=radius*(0.62+random()*0.38); const x=Math.cos(a)*r,y=Math.sin(a)*r*stretch; i?g.lineTo(x,y):g.moveTo(x,y);}
+      g.closePath();g.fillStyle=color;g.fill();
+    };
+    const shadow = g.createRadialGradient(0,0,6,0,0,46);
+    shadow.addColorStop(0,'rgba(10,6,3,.5)');shadow.addColorStop(1,'rgba(10,6,3,0)');
+    g.fillStyle=shadow;g.fillRect(-64,-64,128,128);
+    if (kind === 'wood') {
+      // Long exposed fibres and a small dark bore, not a pale circular sticker.
+      for (let i=0;i<17;i++) {
+        const x=(random()-.5)*27,y=(random()-.5)*20;
+        g.beginPath();g.moveTo(x-2,y-6);g.lineTo(x+(random()-.5)*7,y-24-random()*24);g.lineTo(x+2,y+7);
+        g.fillStyle=i%3?'#9b7348':'#c6a071';g.fill();
+      }
+      polygon(20,17,'#6b452b',1.22);polygon(12,13,'#21150e',1.08);polygon(7,11,'#090706');
+    } else if (kind === 'metal') {
+      polygon(24,20,'#343533');polygon(19,18,'#8d8d83');polygon(15,19,'#252724');
+      g.beginPath();g.arc(0,1,17,.1,2.6);g.lineWidth=2;g.strokeStyle='rgba(225,224,198,.85)';g.stroke();
+      polygon(7,10,'#111412');
+      for(let i=0;i<8;i++){const a=random()*6.28;g.beginPath();g.moveTo(Math.cos(a)*21,Math.sin(a)*21);g.lineTo(Math.cos(a)*32,Math.sin(a)*32);g.strokeStyle='#aaa99a';g.lineWidth=1;g.stroke();}
+    } else if (kind === 'glass') {
+      for(let i=0;i<11;i++) {
+        const a=i/11*6.28+random()*.2,len=28+random()*28;
+        g.beginPath();g.moveTo(Math.cos(a)*5,Math.sin(a)*5);g.lineTo(Math.cos(a+.05)*len*.5,Math.sin(a+.05)*len*.5);g.lineTo(Math.cos(a)*len,Math.sin(a)*len);
+        g.lineWidth=i%2?1:1.7;g.strokeStyle='rgba(200,223,221,.8)';g.stroke();
+      }
+      polygon(10,11,'rgba(225,239,231,.65)');polygon(6,9,'rgba(20,31,29,.95)');
+    } else if (kind === 'dirt') {
+      polygon(25,20,'rgba(89,56,31,.36)');polygon(13,14,'rgba(62,40,25,.65)');
+      for(let i=0;i<32;i++){const a=random()*6.28,r=17+random()*30;g.fillStyle=i%2?'rgba(80,51,27,.6)':'rgba(190,149,99,.6)';g.fillRect(Math.cos(a)*r,Math.sin(a)*r,1+random()*3,1+random()*2);}
+    } else {
+      const warm = kind==='stone' && location==='canyon';
+      polygon(34,17,warm?'#a56b43':kind==='plaster'?'#cebb9c':'#aaa18b');
+      polygon(26,16,warm?'#cf9868':kind==='plaster'?'#e3ceb0':'#cab79b');
+      polygon(17,13,warm?'#75472f':'#6b6051');polygon(8,9,'#302820');
+      for(let i=0;i<6;i++){const a=random()*6.28;g.beginPath();g.moveTo(Math.cos(a)*14,Math.sin(a)*14);g.lineTo(Math.cos(a)*39,Math.sin(a)*39);g.strokeStyle=warm?'#805237':'#776b57';g.lineWidth=1;g.stroke();}
+    }
+    const tex = new T.CanvasTexture(canvas);tex.colorSpace=T.SRGBColorSpace;
+    textures.set(key,tex);return tex;
+  }
+  function mark(hit, normal, kind = surfaceAt(hit)) {
+    const surface = hit.object, location = surface.userData.surface?.location || 'street';
+    const variant = Math.floor(Math.random()*4), p = profile[kind] || profile.wood;
+    let cache = surfaceMaterials.get(surface);if(!cache){cache=new Map();surfaceMaterials.set(surface,cache);}
+    const key=`${kind}-${variant}`;
+    if (!cache.has(key)) {
+      const mat=new T.MeshBasicMaterial({map:texture(kind,location,variant),transparent:true,depthWrite:false,depthTest:true,toneMapped:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,side:T.DoubleSide});
+      const mask=surface.material?.alphaMap, plane=surface.geometry.type==='PlaneGeometry';
+      if (plane) {
+        mat.onBeforeCompile=shader=>{
+          shader.uniforms.impactMask={value:mask || null};
+          shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nattribute vec2 surfaceUv; varying vec2 vSurfaceUv;').replace('#include <begin_vertex>','#include <begin_vertex>\nvSurfaceUv=surfaceUv;');
+          shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying vec2 vSurfaceUv;\nuniform sampler2D impactMask;').replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>\nif(any(lessThan(vSurfaceUv,vec2(0.0))) || any(greaterThan(vSurfaceUv,vec2(1.0)))) discard;\n${mask?'if(texture2D(impactMask,vSurfaceUv).g < 0.5) discard;':''}`);
+        };
+        mat.customProgramCacheKey=()=>`impact-${mask?'masked':'plane'}`;
+      }
+      cache.set(key,mat);
+    }
+    const size=p.size*(0.85+Math.random()*.3), geo=new T.PlaneGeometry(size,size);
+    const transform=new T.Object3D();transform.position.copy(hit.point).addScaledVector(normal,.002);
+    transform.quaternion.setFromUnitVectors(new T.Vector3(0,0,1),normal);
+    transform.rotateZ(kind==='wood'?(Math.random()-.5)*.22:Math.random()*Math.PI*2);transform.updateMatrix();
+    surface.updateWorldMatrix(true,false);
+    geo.applyMatrix4(transform.matrix).applyMatrix4(surface.matrixWorld.clone().invert());
+    const pos=geo.attributes.position, uv=new Float32Array(pos.count*2), dims=surface.geometry.parameters;
+    if(surface.geometry.type==='PlaneGeometry')for(let i=0;i<pos.count;i++){uv[i*2]=pos.getX(i)/dims.width+.5;uv[i*2+1]=pos.getY(i)/dims.height+.5;}
+    geo.setAttribute('surfaceUv',new T.BufferAttribute(uv,2));
+    const mesh=new T.Mesh(geo,cache.get(key));mesh.userData.impact=kind;mesh.renderOrder=1;
+    surface.add(mesh);marks.push(mesh);
+    if(marks.length>limit){const old=marks.shift();old.removeFromParent();old.geometry.dispose();}
+    return {mesh,kind,...p,dust:kind==='stone'&&location==='canyon'?0xc08050:p.dust};
+  }
+  function clear(){for(const mesh of marks){mesh.removeFromParent();mesh.geometry.dispose();}marks.length=0;}
+  return {mark,clear,marks,surfaceAt};
+}
+
 T.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 T.Mesh.prototype.raycast = acceleratedRaycast;
 
@@ -343,6 +499,7 @@ T.ShaderChunk.tonemapping_pars_fragment = T.ShaderChunk.tonemapping_pars_fragmen
 // ================= renderer & post =================
 const stage = $('stage');
 const renderer = new T.WebGLRenderer({ antialias: Q.aa, powerPreference: 'high-performance' });
+renderer.localClippingEnabled = true;
 // Fixed resolution: changing it at runtime rebuilds buffers and makes the picture blink.
 const PR = Math.min(window.devicePixelRatio || 1, Q.pr);
 renderer.setPixelRatio(PR);
@@ -1712,8 +1869,8 @@ function buildModel3D(name) {
     const hip = new T.Group(); hip.position.set(...L.hip); g.add(hip);
     part(L.thigh, hip, ...L.hip, 'body');
     const knee = new T.Group(); knee.position.set(L.knee[0] - L.hip[0], L.knee[1] - L.hip[1], L.knee[2] - L.hip[2]); hip.add(knee);
-    part(L.shin, knee, ...L.knee, 'body');
-    return { hip, knee };
+    const footMesh = part(L.shin, knee, ...L.knee, 'body');
+    return { hip, knee, footMesh };
   });
   const bang = new T.Sprite(new T.SpriteMaterial({ map: bangTex, depthTest: false, transparent: true }));
   bang.scale.set(0.42, 0.42, 1); bang.position.set(0, m.H + 0.2, 0); bang.visible = false; bang.renderOrder = 5; g.add(bang);
@@ -1782,17 +1939,21 @@ function spawnSprite(tex, pos, o) {
 function smoke(pos, n = 3, size = 0.35) {
   for (let i = 0; i < n; i++) spawnSprite(puffTex, pos.clone().add(new T.Vector3(rand(-0.05, 0.05), rand(-0.05, 0.05), rand(-0.05, 0.05))), { size: size * rand(0.7, 1.2), life: rand(0.9, 1.6), grow: 2.5, color: 0xd8d0c8, opacity: 0.45, vel: new T.Vector3(rand(-0.15, 0.25), rand(0.3, 0.6), rand(-0.1, 0.1)) });
 }
-const holes = [];
-const holeGeo = new T.CircleGeometry(0.03, 10), holeRimGeo = new T.RingGeometry(0.03, 0.058, 12);
-const holeMat = new T.MeshBasicMaterial({ color: 0x0c0603, polygonOffset: true, polygonOffsetFactor: -2 });
-const holeRimMat = new T.MeshBasicMaterial({ color: 0xe8c89a, transparent: true, opacity: 0.5, polygonOffset: true, polygonOffsetFactor: -1 });
-function addHole(point, normal) {
-  const grp = new T.Group();
-  grp.add(new T.Mesh(holeRimGeo, holeRimMat), new T.Mesh(holeGeo, holeMat));
-  grp.position.copy(point).addScaledVector(normal, 0.006);
-  grp.lookAt(point.clone().add(normal)); grp.rotateZ(rand(0, 6));
-  scene.add(grp); holes.push(grp);
-  if (holes.length > 100) scene.remove(holes.shift());
+const impacts = createImpactMarks(T);
+function surfaceImpact(hit, normal) {
+  const effect = impacts.mark(hit, normal), p = hit.point.clone().addScaledVector(normal, 0.012);
+  if (effect.kind === 'metal') {
+    ricochet(panOf(hit.point));
+    for (let i = 0; i < 5; i++) spawnSprite(glowTex, p, { size: rand(0.035, 0.065), life: rand(0.1, 0.2), add: true, color: 0xffbd62, vel: normal.clone().multiplyScalar(rand(0.7, 2)).add(new T.Vector3(rand(-1, 1), rand(0.3, 1.8), rand(-0.5, 0.5))) });
+  } else if (effect.kind === 'wood') {
+    burst(p, trimMat(0x9b7348), splinterGeo, 5, 1.7, normal);
+  } else if (effect.kind === 'glass') {
+    glassSound(panOf(hit.point));
+    burst(p, glassMat, shardGeo, 5, 1.3, normal);
+  } else if (effect.kind === 'stone' || effect.kind === 'plaster') {
+    burst(p, trimMat(effect.dust), shardGeo, 5, 1.2, normal);
+  }
+  spawnSprite(puffTex, p, { size: effect.kind === 'metal' ? 0.12 : 0.25, life: 0.55, grow: 1.8, color: effect.dust, opacity: 0.6, vel: normal.clone().multiplyScalar(0.25).add(new T.Vector3(0, 0.12, 0)) });
 }
 const debris = [];
 const shardGeo = new T.TetrahedronGeometry(0.035);
@@ -1938,7 +2099,9 @@ function hitNormal(hit, dir) {
 }
 // flying droplets (instanced, each checks the segment it travels against the world)
 const DROP_MAX = Q.drops;
-const drops = new T.InstancedMesh(new T.SphereGeometry(1, 6, 4), new T.MeshStandardMaterial({ color: 0x7a0000, roughness: 0.15, metalness: 0.1, emissive: 0x200000 }), DROP_MAX);
+// glossy teardrops (round head, pointed tail pointing back along the flight)
+const dropGeo = new T.LatheGeometry([[0, -1.9], [0.25, -1.3], [0.62, -0.6], [0.92, 0], [1, 0.35], [0.85, 0.75], [0.5, 0.97], [0, 1]].map(([r, y]) => new T.Vector2(r, y)), 10);
+const drops = new T.InstancedMesh(dropGeo, new T.MeshStandardMaterial({ color: 0x5c0205, roughness: 0.08, metalness: 0.15, emissive: 0x2a0002, envMapIntensity: 1.6 }), DROP_MAX);
 drops.count = 0; drops.frustumCulled = false; drops.userData.dynamic = true; scene.add(drops);
 const dropList = [];
 function emitBlood(pos, dir, n, speed, spread, size = 1) {
@@ -1947,7 +2110,9 @@ function emitBlood(pos, dir, n, speed, spread, size = 1) {
     // drops must not fly into the lens (they'd show up as huge red balls): fold any camera-bound part away
     const tc = _q.copy(camera.position).sub(pos).normalize(), k = v.dot(tc);
     if (k > 0) v.addScaledVector(tc, -1.6 * k);
-    dropList.push({ p: pos.clone(), v, r: rand(0.01, 0.03) * size, life: 0 });
+    // mostly fine droplets with a few heavy ones, like a real spray
+    const big = Math.random() < 0.12;
+    dropList.push({ p: pos.clone(), v: big ? v.multiplyScalar(0.7) : v, r: (big ? rand(0.03, 0.05) : rand(0.006, 0.022)) * size, life: 0 });
   }
 }
 const pools = [];
@@ -1996,6 +2161,9 @@ function explodeHead(e, dir) {
 }
 function detachArm(e, arm, dir) {
   if (!arm || arm.gone) return;
+  // A detached textured limb would leave its aperture and its per-enemy material.
+  // Painted locations keep the figure intact while the local hit effects play.
+  if (e.slot.clipPlanes) return;
   arm.gone = true;
   const wp = new T.Vector3(); arm.sh.getWorldPosition(wp);
   const shLocal = arm.sh.position.clone();
@@ -2064,7 +2232,7 @@ function updateGore(dt) {
     const d = dropList[i], sp = d.v.length();
     _d.position.copy(d.p);
     _d.quaternion.setFromUnitVectors(_up, _q.copy(d.v).divideScalar(sp || 1));
-    _d.scale.set(d.r, d.r * (1 + Math.min(3, sp * 0.35)), d.r);
+    _d.scale.set(d.r, d.r * (0.8 + Math.min(2.2, sp * 0.22)), d.r);
     _d.updateMatrix(); drops.setMatrixAt(i, _d.matrix);
   }
   drops.count = dropList.length; drops.instanceMatrix.needsUpdate = true;
@@ -2365,6 +2533,48 @@ function difficulty() {
 function pickOutlaw() {
   return Math.random() < (level >= 2 ? 0.4 : 0.25) ? 'annie' : 'outlaw';
 }
+function fitDoorCharacter(c, slot, preferredScale) {
+  if (!slot.doorway) return { scale: preferredScale, position: slot.pos };
+  // Measure the actual hat, body and boots; effect sprites are not body geometry.
+  c.group.updateMatrixWorld(true);
+  const bounds = new T.Box3(), part = new T.Box3();
+  c.group.traverse(o => {
+    if (!o.userData.hitbox || !o.geometry) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    bounds.union(part.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+  });
+  if (bounds.isEmpty()) return { scale: preferredScale, position: slot.pos };
+  const door = slot.doorway, size = bounds.getSize(new T.Vector3());
+  const height = door.top - door.bottom, width = door.right - door.left;
+  // Reserve headroom for the hat, breathing and the animated stance. Scale all
+  // axes together so a narrow opening never squashes the character's proportions.
+  const scale = Math.min(preferredScale, height * 0.86 / size.y, width * 0.82 / Math.hypot(size.x, size.z));
+  return {
+    scale,
+    position: new T.Vector3((door.left + door.right) / 2 - (bounds.min.x + bounds.max.x) * scale / 2,
+      door.bottom - bounds.min.y * scale, slot.pos.z),
+  };
+}
+const footPoint = new T.Vector3();
+function groundDoorFeet(e) {
+  if (!e.slot.doorway || e.phase === 'dead') return;
+  // Ground the animated sole, not the model origin. A bent knee or idle sway
+  // must not lift both feet, and doorway-mask padding is not a floor surface.
+  const feet = e.c.legs?.length ? e.c.legs.map(leg => leg.footMesh) : e.meshes;
+  e.c.group.updateMatrixWorld(true);
+  let lowest = Infinity;
+  for (const mesh of feet) {
+    const positions = mesh.geometry.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      footPoint.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+      lowest = Math.min(lowest, footPoint.y);
+    }
+  }
+  if (Number.isFinite(lowest)) {
+    e.c.group.position.y += e.slot.doorway.bottom - lowest;
+    e.c.group.updateMatrixWorld(true);
+  }
+}
 function spawn(forceSlot, forceKind) {
   const free = slots.filter(s => !s.busy && s.loc === loc && s.visible !== false);
   if (!free.length) return null;
@@ -2377,14 +2587,15 @@ function spawn(forceSlot, forceKind) {
   const painted = LOCS[slot.loc] && LOCS[slot.loc].painted;
   // painted sets are drawn to real scale: people ~1.9 m (doors ~2.7 m, windows ~1.5 m)
   const sc = painted ? 2.0 / 2.3 * (V.scale / 1.14) : V.scale;
-  c.group.scale.setScalar(sc * (slot.scale || 1));
+  const fit = fitDoorCharacter(c, slot, sc * (slot.scale || 1));
+  c.group.scale.setScalar(fit.scale);
   // mirroring flips a 3D model inside out (dark, wrong-looking lighting), so only flat cards are mirrored
   if (c.extra.cutout && !c.extra.model3d && Math.random() < 0.5) c.group.scale.x *= -1;
   scene.add(c.group);
   const face = Math.atan2(camera.position.x - slot.pos.x, camera.position.z - slot.pos.z);
   c.group.rotation.y = c.extra.cutout ? face : face * (slot.type === 'door' ? 0.6 : 0.85);
   const e = {
-    slot, kind, c, V, seed: rand(0, 100), phase: 'rise', t: 0, aim: 0, fall: 0, sink: 0, flinch: 0, hp: V.hp || 1, cocked: false,
+    slot, kind, c, V, standPos: fit.position, seed: rand(0, 100), phase: 'rise', t: 0, aim: 0, fall: 0, sink: 0, flinch: 0, hp: V.hp || 1, cocked: false,
     fuse: difficulty().fuse * (V.fuse || 1) * rand(0.92, 1.12), stay: rand(1.6, 2.1), meshes: [],
   };
   c.group.traverse(o => { if (o.userData.hitbox) { o.userData.enemy = e; e.meshes.push(o); } });
@@ -2393,6 +2604,9 @@ function spawn(forceSlot, forceKind) {
   if (painted && slot.type === 'door') {
     const deep = slot.pos.z < -17; // the mine tunnel is long and lit: walk out from far inside
     e.hide = new T.Vector3(0, 0, deep ? -6 : -2.3); e.riseT = deep ? 1.6 : 0.95;
+    // Off-centre doors recede along their own viewing ray, not the scene's Z
+    // axis; otherwise the figure slides across a jamb while walking inside.
+    if (slot.doorway) e.hide.x = ((slot.doorway.left + slot.doorway.right) / 2 - LOCS[slot.loc].center.x) * e.hide.z / slot.pos.z;
     e.doorFade = true;
   }
   if (painted) {
@@ -2402,6 +2616,7 @@ function spawn(forceSlot, forceKind) {
       if (!cache.has(m.material)) {
         const o = m.material, cl = o.clone(); cl.onBeforeCompile = o.onBeforeCompile; cl.customProgramCacheKey = o.customProgramCacheKey;
         cl.userData.base = { color: o.color.clone(), ei: o.emissiveIntensity }; cl.transparent = true;
+        cl.clippingPlanes = slot.clipPlanes || null;
         cache.set(o, cl); e.mats.push(cl);
       }
       m.material = cache.get(m.material);
@@ -2431,7 +2646,7 @@ function placeEnemy(e) {
   if (e.phase === 'rise') p = (e.riseT ? walk : ease)(clamp(e.t / rt, 0, 1));
   if (e.phase === 'leave') p = 1 - (e.riseT ? walk : ease)(clamp(e.t / rt, 0, 1));
   const g = e.c.group;
-  g.position.copy(e.slot.pos).addScaledVector(e.hide || e.slot.hide, 1 - p);
+  g.position.copy(e.standPos).addScaledVector(e.hide || e.slot.hide, 1 - p);
   if (e.lift) g.position.y += e.lift;
   if (e.mats) {
     const moving = e.phase === 'rise' || e.phase === 'leave';
@@ -2441,7 +2656,7 @@ function placeEnemy(e) {
     e.mats.forEach(m => { m.color.copy(m.userData.base.color).multiplyScalar(lit); m.emissiveIntensity = m.userData.base.ei * lit; m.opacity = op; m.depthWrite = op > 0.98; });
   }
   const walking = e.riseT && p > 0 && p < 1 && e.phase !== 'dead';
-  if (walking) { g.position.y += Math.abs(Math.sin(e.t * 9)) * 0.045; g.rotation.z += Math.sin(e.t * 9) * 0.025; }
+  if (walking && !e.slot.doorway) { g.position.y += Math.abs(Math.sin(e.t * 9)) * 0.045; g.rotation.z += Math.sin(e.t * 9) * 0.025; }
   if (e.c.legs && e.c.legs.length) {
     // walk cycle: thighs swing opposite each other, the knee folds while its leg swings back
     const w = e.t * 9, amp = walking ? 0.5 : 0;
@@ -2474,6 +2689,7 @@ function placeEnemy(e) {
   }
   g.rotation.z = Math.sin(time * 1.3 + e.seed) * 0.025 * idle;
   if (e.c.extra.parasol) e.c.extra.parasol.rotation.y = time * 1.5;
+  groundDoorFeet(e);
 }
 function removeEnemy(e) { scene.remove(e.c.group); e.slot.busy = false; (e.mats || []).forEach(m => m.dispose()); }
 
@@ -2489,13 +2705,13 @@ function shoot() {
   const targets = staticHits.concat(...enemies.filter(e => e.phase !== 'dead').map(e => e.meshes));
   let hit = firstSolid(ray.intersectObjects(targets, false));
   const leafHit = firstSolid(ray.intersectObjects(LEAF_MESHES, false));
-  const aimedAtLeaf = leafHit && (!hit || leafHit.distance < hit.distance + 0.4);
+  const aimedAtLeaf = leafHit && (!hit || leafHit.distance < hit.distance);
+  if (aimedAtLeaf) hit = leafHit;
   // Keep deliberate shots at characters and interactive scenery; assist only a miss.
-  const directTarget = hit && (hit.object.userData.enemy || hit.object.userData.bottle || hit.object.userData.glass);
+  const directTarget = hit && (paintedBottleAt(hit) || hit.object.userData.enemy || hit.object.userData.bottle || hit.object.userData.glass || hit.object.userData.leaf);
   if (!directTarget && !aimedAtLeaf) hit = assist(targets) || hit;
   if (aimedAtLeaf && !(hit && hit.object.userData.enemy)) {
     leafHit.object.userData.leaf.vel += 3.5;
-    spawnSprite(puffTex, leafHit.point, { size: 0.25, life: 0.6, grow: 1.5, color: 0xc9a882, opacity: 0.7 });
   }
   if (!hit) { combo = 1; updateHud(); return; }
   const pan = panOf(hit.point);
@@ -2535,6 +2751,14 @@ function shoot() {
     bs.grp.remove(o); staticHits.splice(staticHits.indexOf(o), 1); bs.mesh = null; bs.timer = 18;
     glassSound(pan);
     score += 50; floatText(wp, '+$50', '#bfe8c8');
+  } else if (paintedBottleAt(hit)) {
+    const pb = paintedBottleAt(hit), n = hitNormal(hit, ray.ray.direction);
+    shatterPaintedBottle(pb);
+    const gm = new T.MeshStandardMaterial({ color: pb.b[4], roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.85 });
+    burst(hit.point.clone().addScaledVector(n, 0.05), gm, shardGeo, 16, 2.6, n);
+    spawnSprite(puffTex, hit.point, { size: 0.2, life: 0.4, grow: 1.5, color: 0xe8e0d0, opacity: 0.5 });
+    glassSound(pan);
+    score += 50; floatText(hit.point, '+$50', '#bfe8c8');
   } else if (o.userData.glass) {
     burst(hit.point.clone(), glassMat, shardGeo, 22, 2.5, new T.Vector3(0, 0, 1));
     o.visible = false; staticHits.splice(staticHits.indexOf(o), 1);
@@ -2543,16 +2767,16 @@ function shoot() {
     combo = 1;
     const n = hit.face ? hit.face.normal.clone().transformDirection(o.matrixWorld) : new T.Vector3(0, 1, 0);
     if (o.material && o.material.side === T.BackSide) n.negate();
-    if (o !== ground) {
-      addHole(hit.point, n);
-      burst(hit.point.clone().addScaledVector(n, 0.03), trimMat(0x8a6a48), splinterGeo, 5, 1.8, n);
-    } else ricochet(pan);
-    spawnSprite(puffTex, hit.point.clone().addScaledVector(n, 0.05), { size: 0.28, life: 0.8, grow: 1.6, color: o === ground ? 0xd6a86c : 0xc9a882, opacity: 0.7, vel: n.clone().multiplyScalar(0.5) });
+    if (n.dot(ray.ray.direction) > 0) n.negate();
+    surfaceImpact(hit, n);
   }
   updateHud();
 }
 // Painted parts are flat cards: a hit only counts where the picture is opaque.
 function solidAt(h) {
+  if (h.object.material?.transparent && h.object.material.opacity < 0.05) return false;
+  for (const p of h.object.material?.clippingPlanes || []) if (p.distanceToPoint(h.point) < 0) return false;
+  for (let o = h.object; o; o = o.parent) if (!o.visible) return false;
   const m = h.object.userData.mask;
   if (!m || !h.uv) return true;
   const x = clamp(h.uv.x * m.w | 0, 0, m.w - 1), y = clamp((1 - h.uv.y) * m.h | 0, 0, m.h - 1);
@@ -2616,10 +2840,11 @@ function startGame() {
   initAudio();
   musicStart();
   clearEnemies();
-  holes.forEach(h => scene.remove(h)); holes.length = 0;
+  impacts.clear();
   clearGore();
   glassPanes.forEach(p => { if (!p.visible) { p.visible = true; staticHits.push(p); } });
   bottleSpots.forEach(bs => { if (!bs.mesh) placeBottle(bs); });
+  restorePaintings();
   score = 0; lives = 3; combo = 1; kills = 0; shots = 0; hits = 0; level = 1;
   ammo = 6; reloading = 0; spawnT = 1.4; shake = 0; hurtFx = 0;
   if (loc !== PLAYLIST[0]) setLoc(PLAYLIST[0]); locKills = 0; fadeEl.style.opacity = 0; hideBanner();
@@ -2848,21 +3073,13 @@ function update(dt) {
     else if (e.phase === 'dead') {
       e.aim = Math.max(0, e.aim - dt * 4);
       if (e.slot.type === 'door' && !e.doorHit && e.t > 0.2) { e.doorHit = true; kickDoor(loc, e.slot.pos.x, 7); }
-      if (LOCS[loc].painted && e.slot.type !== 'door') {
-        // behind a sill, crest or cover: slump down out of sight instead of tipping over (no legs popping up)
-        // tips over backwards, away from the camera (legs stay behind the edge), then drops out of view
-        if (e.slot.coverTop !== undefined) {
-          // behind a rock/crate: tipping back would slide the body sideways past the cover's edge
-          // (things further away drift toward the picture's centre), so buckle sideways and drop straight down
-          // collapse straight down: the body never leaves the cover's outline, so no hidden edges show
-          const k = clamp(e.t / 0.25, 0, 1);
-          e.fall = k * 0.08;
-          e.squash = 1 - 0.12 * k;
-          e.sink = (q => q * q * (3 - 2 * q))(clamp((e.t - 0.1) / 0.7, 0, 1)) * (2.3 * Math.abs(e.c.group.scale.y) + (e.lift || 0) + 0.2);
-        } else {
-          e.fall = ease(clamp(e.t / 0.5, 0, 1)) * 1.2;
-          e.sink = Math.max(0, e.t - 0.35) ** 2 * 5;
-        }
+      if (LOCS[loc].painted) {
+        // Collapse within the opening: rotating around the feet pushes the upper
+        // body through a flat facade and exposes the legs in neighbouring holes.
+        const k = clamp(e.t / 0.25, 0, 1), q = clamp((e.t - 0.12) / 0.78, 0, 1);
+        if (!e.standingHeight) e.standingHeight = 2.3 * Math.abs(e.c.group.scale.y);
+        e.fall = 0; e.squash = 1 - 0.08 * k;
+        e.sink = q * q * (3 - 2 * q) * (e.standingHeight + (e.lift || 0) + 0.25);
       } else {
         e.fall = Math.pow(clamp(e.t / 0.45, 0, 1), 2) * 1.45;
         e.sink = LOCS[loc].painted ? 0 : Math.max(0, e.t - 2.2) * Math.max(0, e.t - 2.2) * 6;
@@ -2924,9 +3141,9 @@ const PAINTED = [
       { d: 5.59, polys: [circP(1255, 662, 142), rectP(1092, 618, 1142, 772)] },
     ],
     slots: [
-      { type: 'door', u: 1018, d: 11.25, y: 2.89, scale: 0.92, hide: [-1.6, 0, 0] },
-      { type: 'door', u: 1233, d: 11.25, y: 2.89, scale: 0.92, hide: [1.6, 0, 0] },
-      { type: 'door', u: 1440, d: 11.25, y: 2.89, scale: 0.92, hide: [1.6, 0, 0] },
+      { type: 'door', u: 1018, d: 11.25, y: 2.89, floorRow: 335, scale: 0.92, hide: [-1.6, 0, 0] },
+      { type: 'door', u: 1233, d: 11.25, y: 2.89, floorRow: 335, scale: 0.92, hide: [1.6, 0, 0] },
+      { type: 'door', u: 1440, d: 11.25, y: 2.89, floorRow: 335, scale: 0.92, hide: [1.6, 0, 0] },
       { type: 'cover', u: 300, d: 9.4, y: 0, top: 518, hide: [0, -2.9, 0] },
       { type: 'cover', u: 620, d: 9.4, y: 0, top: 518, hide: [0, -2.9, 0] },
       { type: 'cover', u: 1255, d: 6.0, y: 0, top: 530, hide: [0, -2.9, 0] },
@@ -2957,6 +3174,50 @@ const PAINTED = [
     ] },
 ];
 const PLAYLIST = [];
+// ---- painted bottles: [x0, y0, x1, y1, glass colour] in painting pixels ----
+const PAINT = {};
+const PAINTED_BOTTLES = {
+  street: [[159, 553, 172, 582, 0x8a6a3a], [236, 562, 246, 582, 0x8a6a3a], [314, 555, 323, 582, 0x8a6a3a], [952, 540, 967, 583, 0x2f7a3a], [1508, 554, 1519, 585, 0x2f6a4a], [1653, 555, 1665, 585, 0x2f6a4a]],
+  saloon: [
+    [322, 414, 336, 452, 0x3a7a4a], [339, 421, 351, 452, 0x3a5a3a], [361, 414, 375, 452, 0x9a7a3a], [377, 419, 391, 452, 0x3a5a3a], [399, 412, 415, 452, 0x8a5a2a],
+    [424, 413, 438, 452, 0x7a4a2a], [449, 417, 461, 452, 0x6a7a4a], [469, 414, 483, 452, 0x3a6a4a], [491, 419, 503, 452, 0x6a6a3a], [505, 422, 514, 452, 0x3a5a4a],
+    [402, 467, 412, 505, 0x7a5a3a], [412, 464, 423, 505, 0xb08a3a], [427, 466, 438, 505, 0x8a7a5a], [439, 467, 449, 505, 0x8a6a4a], [456, 467, 468, 505, 0x9a6a3a],
+    [474, 469, 483, 505, 0x6a4a2a], [501, 464, 516, 505, 0xb0802a], [545, 466, 556, 505, 0x6a5a4a], [316, 497, 336, 521, 0xbcc8cc],
+    [621, 420, 634, 452, 0x9a8a5a], [640, 417, 654, 452, 0xb0802a], [659, 414, 674, 452, 0xb0802a], [676, 420, 690, 452, 0x2f5a3a], [691, 415, 705, 452, 0x5a4a3a],
+    [711, 416, 725, 452, 0x8a5a3a], [729, 413, 745, 452, 0xa07030], [747, 416, 761, 452, 0x3a5a3a],
+    [611, 471, 624, 505, 0x9a8a6a], [638, 465, 652, 505, 0x3a5a3a], [656, 470, 671, 505, 0x6a6a5a], [680, 470, 693, 505, 0x9a6a3a], [696, 466, 712, 505, 0xb09a6a],
+    [724, 464, 738, 505, 0x9a8a6a], [742, 465, 757, 505, 0x9a6a3a]],
+  canyon: [],
+};
+function paintedBottleAt(hit) {
+  const key = hit.object.userData.painting, list = key && PAINTED_BOTTLES[key];
+  if (!list || !hit.uv) return null;
+  const x = hit.uv.x * PW, y = (1 - hit.uv.y) * PH;
+  const i = list.findIndex(([x0, y0, x1, y1]) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 1);
+  return i >= 0 && !PAINT[key].broken.has(i) ? { key, i, b: list[i] } : null;
+}
+function shatterPaintedBottle(pb) {
+  const P = PAINT[pb.key], g = P.g, [x0, y0, x1, y1] = pb.b;
+  P.broken.add(pb.i);
+  // paint the bottle out: each row blends the pixels just left and right of it; a jagged stub stays on the shelf
+  const X0 = x0 - 2, X1 = x1 + 2, w = X1 - X0 + 1, stub = (y1 - y0) * 0.22;
+  const img = g.getImageData(X0 - 3, y0 - 3, w + 6, y1 - y0 + 4), d = img.data, W = w + 6;
+  const px = (x, y) => (y * W + x) * 4;
+  for (let y = 0; y < img.height; y++) {
+    const L = px(0, y), Rr = px(W - 1, y);
+    for (let x = 3; x < W - 3; x++) {
+      const yy = y0 - 3 + y, jag = y1 - stub + Math.sin(x * 2.3 + pb.i) * stub * 0.6;
+      if (yy > jag) continue;
+      const k = (x - 3) / (w - 1), o = px(x, y), n = (Math.random() - 0.5) * 10;
+      for (let c = 0; c < 3; c++) d[o + c] = d[L + c] * (1 - k) + d[Rr + c] * k + n;
+    }
+  }
+  g.putImageData(img, X0 - 3, y0 - 3);
+  P.tex.needsUpdate = true;
+}
+function restorePaintings() {
+  for (const P of Object.values(PAINT)) if (P.broken.size) { P.g.drawImage(P.img, 0, 0); P.broken.clear(); P.tex.needsUpdate = true; }
+}
 const SWING_LEAVES = [], LEAF_MESHES = [], SWING_DOORS = [];
 // push both leaves of the batwing door nearest to world x (inward = away from the camera)
 // keep the leaves swung open while someone is passing through (they can't close on a body)
@@ -2981,13 +3242,18 @@ function kickDoor(li, x, strength) {
     LOCS.push({ name: P.name, sub: P.sub, quota: P.quota, center, painted: { h: P.h }, look: new T.Vector3(0, P.h, -10) });
     PLAYLIST.push(li);
     const img = new Image(); img.src = window.PAINTINGS[P.key]; await img.decode();
-    const tex = new T.Texture(img); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = maxAniso; tex.needsUpdate = true;
+    // the painting lives on a canvas so painted bottles can be shot out of it
+    const [pcv, pg] = cnv(PW, PH); pg.drawImage(img, 0, 0);
+    const tex = new T.CanvasTexture(pcv); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = maxAniso;
+    PAINT[P.key] = { img, g: pg, tex, broken: new Set() };
     for (const L of P.layers) {
       const w = PW * L.d / PF, hh = PH * L.d / PF;
       const mat = new T.MeshBasicMaterial({ map: tex, toneMapped: false, fog: false });
       const m = new T.Mesh(new T.PlaneGeometry(w, hh), mat);
       m.position.set(P.x, P.h, -L.d);
       m.userData.dynamic = true;
+      m.userData.surface = paintedSurface(P.key, L);
+      m.userData.painting = P.key;
       if (L.far) { m.renderOrder = -2; scene.add(m); continue; }
       // full-resolution masks: half-res ones left stair-stepped edges on figures behind covers
       const MW = PW, MH = PH, [c, g] = cnv(MW, MH), k = 1;
@@ -3032,9 +3298,28 @@ function kickDoor(li, x, strength) {
       m.userData.mask = { a, w: MW, h: MH };
       scene.add(m); staticHits.push(m);
     }
+    // The distant canyon cliffs are part of the background painting, but are
+    // still solid targets. An invisible masked surface excludes the sky and
+    // tunnel and lets nearer rocks, crates and figures occlude the impact.
+    if (P.key === 'canyon') {
+      const d = 18.8, [mc, mg] = cnv(PW, PH);
+      mg.fillStyle = '#000'; mg.fillRect(0, 0, PW, PH); mg.fillStyle = '#fff';
+      const cliffs = [
+        [[0,0],[326,0],[326,66],[455,85],[567,142],[662,173],[721,236],[807,261],[875,314],[925,350],[983,384],[983,550],[274,549],[0,505]],
+        [[1326,391],[1382,330],[1410,250],[1425,147],[1500,129],[1575,96],[1740,76],[1840,49],[1870,43],[1870,533],[1698,505],[1690,555],[1326,559]],
+      ];
+      cliffs.forEach(poly => { mg.beginPath(); poly.forEach(([x, y], i) => mg[i ? 'lineTo' : 'moveTo'](x, y)); mg.closePath(); mg.fill(); });
+      const mask = new T.CanvasTexture(mc), bytes = mg.getImageData(0, 0, PW, PH).data, a = new Uint8Array(PW * PH);
+      for (let i = 0; i < a.length; i++) a[i] = bytes[i * 4];
+      const rock = new T.Mesh(new T.PlaneGeometry(PW * d / PF, PH * d / PF), new T.MeshBasicMaterial({ colorWrite: false, depthWrite: false, alphaMap: mask, alphaTest: 0.5 }));
+      rock.position.set(P.x, P.h, -d); rock.userData.dynamic = true;
+      rock.userData.mask = { a, w: PW, h: PH }; rock.userData.surface = { location: P.key, kind: 'stone' };
+      scene.add(rock); staticHits.push(rock);
+    }
     // invisible ground: hides whatever sinks below it and catches bullets and blood
     const gnd = new T.Mesh(new T.PlaneGeometry(220, 220), groundMat);
     gnd.rotation.x = -Math.PI / 2; gnd.position.set(P.x, 0, -60); gnd.renderOrder = -1; gnd.userData.dynamic = true;
+    gnd.userData.surface = { location: P.key, kind: P.key === 'saloon' ? 'wood' : 'dirt' };
     scene.add(gnd); staticHits.push(gnd);
     for (const sw of P.swing || []) {
       const DI = 19, DL = 16.85;
@@ -3090,6 +3375,7 @@ function kickDoor(li, x, strength) {
         const pivot = new T.Group(); pivot.position.set(px, 0, -DL); pivot.userData.dynamic = true; scene.add(pivot);
         const leaf = new T.Mesh(new T.PlaneGeometry(PW * DL / PF, PH * DL / PF), new T.MeshBasicMaterial({ map: tex, alphaMap: new T.CanvasTexture(lc), alphaTest: 0.5, side: T.DoubleSide, toneMapped: false, fog: false }));
         leaf.position.set(P.x - px, P.h, 0); pivot.add(leaf);
+        leaf.userData.surface = { location: P.key, kind: 'wood' };
         const a = new Uint8Array((PW >> 2) * (PH >> 2));
         for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) if (leafMask[li][y * PW + x]) a[(y >> 2) * (PW >> 2) + (x >> 2)] = 255;
         leaf.userData.mask = { a, w: PW >> 2, h: PH >> 2 };
@@ -3101,8 +3387,36 @@ function kickDoor(li, x, strength) {
     }
     for (const s of P.slots) {
       const y = s.y !== undefined ? s.y : P.h - (s.row - PCY) * s.d / PF + s.dy;
+      // Planes follow the painting's projection, including while a figure moves
+      // deeper into a doorway. The same planes reject invisible raycast hits.
+      const clipPlanes = [];
+      let doorway;
+      const plane = (x, y, z, c) => clipPlanes.push(new T.Plane(new T.Vector3(x, y, z), c).normalize());
+      if (s.type === 'window' || s.type === 'door') {
+        const apertures = P.layers.flatMap(l => l.holes || []).map(poly => ({
+          x0: Math.min(...poly.map(p => p[0])), x1: Math.max(...poly.map(p => p[0])),
+          y0: Math.min(...poly.map(p => p[1])), y1: Math.max(...poly.map(p => p[1])),
+        }));
+        const a = apertures.find(a => s.u >= a.x0 && s.u <= a.x1);
+        if (a) {
+          // Balcony floorboards are below the opening mask's lower edge. Keep
+          // feet on that painted floor; the foreground railing hides them.
+          const floorRow = s.floorRow ?? a.y1;
+          if (s.type === 'door') doorway = {
+            left: P.x + (a.x0 - PCX) * s.d / PF, right: P.x + (a.x1 - PCX) * s.d / PF,
+            top: P.h + (PCY - a.y0) * s.d / PF, bottom: P.h + (PCY - floorRow) * s.d / PF,
+          };
+          plane(1, 0, (a.x0 - PCX) / PF, -P.x);
+          plane(-1, 0, -(a.x1 - PCX) / PF, P.x);
+          plane(0, -1, -(PCY - a.y0) / PF, P.h);
+          plane(0, 1, (PCY - floorRow - (s.type === 'door' ? 2 : 0)) / PF, -P.h);
+        }
+      } else {
+        const edge = s.top !== undefined ? s.top : s.row;
+        if (edge !== undefined) plane(0, 1, (PCY - edge - 5) / PF, -P.h);
+      }
       slots.push({ type: s.type, loc: li, scale: s.scale, pos: new T.Vector3(P.x + (s.u - PCX) * s.d / PF, y, -s.d), hide: new T.Vector3(...s.hide),
-        coverTop: s.top !== undefined ? P.h - (s.top - PCY) * s.d / PF : undefined, edge: s.dy !== undefined ? -s.dy : undefined });
+        clipPlanes, doorway, coverTop: s.top !== undefined ? P.h - (s.top - PCY) * s.d / PF : undefined, edge: s.dy !== undefined ? -s.dy : undefined });
     }
   }
 }
