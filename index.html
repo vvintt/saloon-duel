@@ -2711,7 +2711,9 @@ const PAINTED = [
   { key: 'saloon', name: 'Салун «Последний шанс»', sub: 'Стреляют с балкона, из-за стойки и столов', quota: 8, h: 2.04, x: 1300,
     layers: [
       { d: 25, far: true },
-      { d: 11.5, polys: [rectP(0, 0, PW, PH)], holes: [rectP(955, 172, 1085, 250), rectP(1165, 172, 1295, 250), rectP(1375, 172, 1505, 250)] },
+      { d: 11.5, polys: [rectP(0, 0, PW, PH)], holes: [rectP(955, 172, 1085, 324), rectP(1165, 172, 1295, 324), rectP(1375, 172, 1505, 324)] },
+      // balcony balustrade in front of the doors: only the wood is solid, the gaps between balusters stay open
+      { d: 11.45, full: true, polys: [rectP(945, 247, 1515, 337)], lum: { y0: 259, y1: 323, thr: 44, grow: 1 } },
       { d: 8.86, polys: [[[85, 516], [760, 516], [762, 668], [80, 668]]] },
       { d: 7.33, polys: [circP(1690, 610, 108), rectP(1580, 600, 1616, 692)] },
       { d: 5.59, polys: [circP(1255, 662, 142), rectP(1092, 618, 1142, 772)] },
@@ -2766,11 +2768,29 @@ const PLAYLIST = [];
       m.position.set(P.x, P.h, -L.d);
       m.userData.dynamic = true;
       if (L.far) { m.renderOrder = -2; scene.add(m); continue; }
-      const MW = 935, MH = 420, [c, g] = cnv(MW, MH), k = MW / PW;
+      const MW = L.full ? PW : 935, MH = L.full ? PH : 420, [c, g] = cnv(MW, MH), k = MW / PW;
       g.fillStyle = '#000'; g.fillRect(0, 0, MW, MH);
       const path = poly => { g.beginPath(); poly.forEach(([x, y], i) => g[i ? 'lineTo' : 'moveTo'](x * k, y * k)); g.closePath(); g.fill(); };
       g.fillStyle = '#fff'; L.polys.forEach(path);
       g.fillStyle = '#000'; (L.holes || []).forEach(path);
+      if (L.lum) {
+        // inside the band keep only bright (lit wood) pixels, slightly grown
+        const [ic, ig] = cnv(PW, PH); ig.drawImage(img, 0, 0);
+        const src = ig.getImageData(0, 0, PW, PH).data, md = g.getImageData(0, 0, MW, MH);
+        const keep = new Uint8Array(PW * PH);
+        for (let y = L.lum.y0; y < L.lum.y1; y++) for (let x = 0; x < PW; x++) {
+          const i = (y * PW + x) * 4, l = 0.3 * src[i] + 0.59 * src[i + 1] + 0.11 * src[i + 2];
+          if (l > L.lum.thr) keep[y * PW + x] = 1;
+        }
+        const G2 = L.lum.grow;
+        for (let y = L.lum.y0; y < L.lum.y1; y++) for (let x = 0; x < PW; x++) {
+          const o = (y * PW + x) * 4; if (!md.data[o]) continue;
+          let on = 0;
+          for (let dx = -G2; dx <= G2 && !on; dx++) if (keep[y * PW + clamp(x + dx, 0, PW - 1)]) on = 1;
+          if (!on) { md.data[o] = md.data[o + 1] = md.data[o + 2] = 0; }
+        }
+        g.putImageData(md, 0, 0);
+      }
       const data = g.getImageData(0, 0, MW, MH).data, a = new Uint8Array(MW * MH);
       for (let i = 0; i < a.length; i++) a[i] = data[i * 4 + 1];
       const at = new T.CanvasTexture(c);
