@@ -2817,7 +2817,7 @@ const PAINTED = [
       // bank hitching rail with its bottle, in front of the doorway
       { d: 15.8, polys: [rectP(836, 574, 1034, 593), rectP(948, 536, 972, 578)] },
       { d: 10.4, polys: [[[0, 615], [90, 603], [200, 612], [285, 638], [302, 700], [272, 757], [0, 762]]] },
-      { d: 11.8, polys: [[[440, 600], [470, 588], [612, 590], [617, 700], [602, 720], [443, 721]]] },
+      { d: 11.8, trim: 14, polys: [[[440, 600], [446, 591], [470, 588], [612, 588], [617, 700], [602, 720], [443, 721]]] },
       { d: 12.4, polys: [[[1176, 598], [1208, 598], [1208, 536], [1300, 536], [1300, 598], [1400, 600], [1400, 702], [1178, 706]]] },
       { d: 12.6, polys: [rectP(1466, 628, 1826, 702)] },
     ],
@@ -2902,11 +2902,24 @@ function kickDoor(li, x, strength) {
       m.position.set(P.x, P.h, -L.d);
       m.userData.dynamic = true;
       if (L.far) { m.renderOrder = -2; scene.add(m); continue; }
-      const MW = L.full ? PW : 935, MH = L.full ? PH : 420, [c, g] = cnv(MW, MH), k = MW / PW;
+      // full-resolution masks: half-res ones left stair-stepped edges on figures behind covers
+      const MW = PW, MH = PH, [c, g] = cnv(MW, MH), k = 1;
       g.fillStyle = '#000'; g.fillRect(0, 0, MW, MH);
       const path = poly => { g.beginPath(); poly.forEach(([x, y], i) => g[i ? 'lineTo' : 'moveTo'](x * k, y * k)); g.closePath(); g.fill(); };
       g.fillStyle = '#fff'; L.polys.forEach(path);
       g.fillStyle = '#000'; (L.holes || []).forEach(path);
+      if (L.trim) {
+        // snap the cover's top edge to the painting: drop dark background pixels above the object, column by column
+        const [ic, ig] = cnv(PW, PH); ig.drawImage(img, 0, 0);
+        const src = ig.getImageData(0, 0, PW, PH).data, md = g.getImageData(0, 0, MW, MH);
+        const lum = (x, y) => { const i = (y * PW + x) * 4; return 0.3 * src[i] + 0.59 * src[i + 1] + 0.11 * src[i + 2]; };
+        for (let x = 0; x < PW; x++) {
+          let y = 0; while (y < PH && !md.data[(y * PW + x) * 4]) y++;
+          const lim = Math.min(PH, y + L.trim);
+          while (y < lim && lum(x, y) < 50 && lum(x, y + 1) < 50) { md.data[(y * PW + x) * 4] = md.data[(y * PW + x) * 4 + 1] = md.data[(y * PW + x) * 4 + 2] = 0; y++; }
+        }
+        g.putImageData(md, 0, 0);
+      }
       if (L.lum) {
         // inside the band keep only bright (lit wood) pixels, slightly grown
         const [ic, ig] = cnv(PW, PH); ig.drawImage(img, 0, 0);
@@ -2945,18 +2958,31 @@ function kickDoor(li, x, strength) {
       // trace each leaf: per row, from the first to the last lit-wood pixel inside its half of the box
       const leafMask = [new Uint8Array(PW * PH), new Uint8Array(PW * PH)];
       [[bx0, bsp], [bsp + 1, bx1]].forEach(([a0, a1], li) => {
+        const spans = {};
         for (let y = by0; y <= by1; y++) {
           let f = -1, l = -1;
           for (let x = a0; x <= a1; x++) if (lum(x, y) > 40) { if (f < 0) f = x; l = x; }
-          if (f >= 0 && l - f > 6) for (let x = f; x <= l; x++) leafMask[li][y * PW + x] = 1;
+          spans[y] = f >= 0 && l - f > 6 ? [f, l] : null;
+        }
+        // smooth the traced outline (median of 5 rows) so edges are straight, then grow by 1 px to cover the seam
+        // leaves are straight boards: both side edges become straight lines (median over all rows)
+        const rows = Object.values(spans).filter(Boolean);
+        const medAll = i => rows.map(v => v[i]).sort((a, b) => a - b)[rows.length >> 1];
+        const F = medAll(0), Lr = medAll(1);
+        const ys = Object.keys(spans).filter(y => spans[y]).map(Number), yB = Math.max(...ys);
+        for (let y = yB + 1; y <= Math.min(by1 + 2, yB + 3); y++) spans[y] = spans[yB];
+        for (let y = by0; y <= by1 + 2; y++) {
+          if (!spans[y]) continue;
+          const f = Math.max(a0 - 1, F - 1), l = Math.min(a1 + 1, Lr + 1);
+          for (let x = f; x <= l; x++) leafMask[li][y * PW + x] = 1;
         }
       });
       // paint the leaves out of the interior picture: each column fades from the dark room above to the floor below
       const out = ig.createImageData(PW, PH); out.data.set(sd);
-      for (let x = bx0 - 1; x <= bx1 + 1; x++) {
+      for (let x = bx0 - 2; x <= bx1 + 2; x++) {
         const top = ((by0 - 6) * PW + x) * 4, bot = ((by1 + 6) * PW + x) * 4;
-        for (let y = by0 - 1; y <= by1 + 1; y++) {
-          let hit = false; for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = leafMask[0][(y + dy) * PW + x + dx] || leafMask[1][(y + dy) * PW + x + dx];
+        for (let y = by0 - 2; y <= by1 + 2; y++) {
+          let hit = false; for (let dx = -2; dx <= 2 && !hit; dx++) for (let dy = -2; dy <= 2 && !hit; dy++) hit = leafMask[0][(y + dy) * PW + x + dx] || leafMask[1][(y + dy) * PW + x + dx];
           if (!hit) continue;
           const k = (y - by0) / (by1 - by0), o = (y * PW + x) * 4;
           for (let c = 0; c < 3; c++) out.data[o + c] = (sd[top + c] * (1 - k) + sd[bot + c] * k) * 0.8;
