@@ -2352,7 +2352,8 @@ function spawn(forceSlot, forceKind) {
   };
   c.group.traverse(o => { if (o.userData.hitbox) { o.userData.enemy = e; e.meshes.push(o); } });
   if (painted && slot.type !== 'door') e.pivotH = slot.edge;
-  if (painted && slot.type === 'door' && state === 'play') kickDoor(slot.loc, slot.pos.x, -2.5);
+  // in painted sets people walk out of the doorway from the dark room behind, pushing the batwing doors open
+  if (painted && slot.type === 'door') { e.hide = new T.Vector3(0, 0, -2.3); e.riseT = 0.95; }
   if (slot.coverTop !== undefined) {
     // crouched behind the cover: the head starts just under its top edge and the figure stands up from there
     const figH = 2.3 * Math.abs(c.group.scale.y);
@@ -2373,11 +2374,13 @@ function spawn(forceSlot, forceKind) {
 const RISE_T = 0.5;
 function placeEnemy(e) {
   let p = 1;
-  if (e.phase === 'rise') p = ease(clamp(e.t / RISE_T, 0, 1));
-  if (e.phase === 'leave') p = 1 - ease(clamp(e.t / RISE_T, 0, 1));
+  const rt = e.riseT || RISE_T, walk = t => t * t * (3 - 2 * t);
+  if (e.phase === 'rise') p = (e.riseT ? walk : ease)(clamp(e.t / rt, 0, 1));
+  if (e.phase === 'leave') p = 1 - (e.riseT ? walk : ease)(clamp(e.t / rt, 0, 1));
   const g = e.c.group;
   g.position.copy(e.slot.pos).addScaledVector(e.hide || e.slot.hide, 1 - p);
   if (e.lift) g.position.y += e.lift;
+  if (e.riseT && p > 0 && p < 1) { g.position.y += Math.abs(Math.sin(e.t * 13)) * 0.05; g.rotation.z += Math.sin(e.t * 13) * 0.03; }
   g.position.y -= e.sink;
   if (e.squash) { if (!e.baseSY) e.baseSY = g.scale.y; g.scale.y = e.baseSY * e.squash; }
   g.rotation.x = -e.fall - e.flinch * 0.5 + (e.slot.lean || 0) * p * (1 - e.fall);
@@ -2750,7 +2753,9 @@ function update(dt) {
   for (const e of enemies) {
     e.t += dt;
     e.flinch = Math.max(0, e.flinch - dt * 4);
-    if (e.phase === 'rise' && e.t >= RISE_T) { e.phase = 'up'; e.t = 0; }
+    if (e.phase === 'rise' && e.riseT && !e.doorOpened && e.t > e.riseT * 0.35) { e.doorOpened = true; kickDoor(loc, e.slot.pos.x, -7); }
+    if (e.phase === 'leave' && e.riseT && !e.doorOpened2 && e.t > e.riseT * 0.5) { e.doorOpened2 = true; kickDoor(loc, e.slot.pos.x, 6); }
+    if (e.phase === 'rise' && e.t >= (e.riseT || RISE_T)) { e.phase = 'up'; e.t = 0; }
     else if (e.phase === 'up' && state !== 'menu') {
       if (e.c.rightArm && !INNOCENT.has(e.kind)) {
         e.aim = clamp((e.t - e.fuse * 0.35) / (e.fuse * 0.5), 0, 1);
@@ -2765,7 +2770,7 @@ function update(dt) {
         }
       } else if (e.t >= e.stay) { e.phase = 'leave'; e.t = 0; }
     }
-    else if (e.phase === 'leave' && e.t >= RISE_T) e.gone = true;
+    else if (e.phase === 'leave' && e.t >= (e.riseT || RISE_T)) e.gone = true;
     else if (e.phase === 'dead') {
       e.aim = Math.max(0, e.aim - dt * 4);
       if (e.slot.type === 'door' && !e.doorHit && e.t > 0.2) { e.doorHit = true; kickDoor(loc, e.slot.pos.x, 7); }
@@ -2815,7 +2820,7 @@ const PAINTED = [
       { d: 16, polys: [[[0, 30], [250, 78], [250, 125], [340, 125], [340, 100], [600, 100], [600, 125], [655, 125], [690, 160], [715, 170], [850, 170], [850, 148], [1000, 148], [1000, 170], [1140, 170], [1140, 200], [1160, 200], [1160, 145], [1300, 145], [1385, 95], [1470, 145], [1600, 145], [1600, 190], [1690, 190], [1690, 140], [1870, 60], [1870, 841], [0, 841]]],
         holes: [rectP(320, 285, 408, 380), rectP(515, 285, 598, 380), rectP(780, 285, 875, 385), rectP(970, 285, 1060, 385), rectP(1235, 285, 1335, 385), rectP(1440, 285, 1525, 385), rectP(420, 450, 515, 622), rectP(888, 452, 996, 620), rectP(1350, 455, 1440, 622)] },
       // bank hitching rail with its bottle, in front of the doorway
-      { d: 15.8, polys: [rectP(836, 574, 1034, 593), rectP(948, 536, 972, 578)] },
+      { d: 15.8, polys: [rectP(836, 581, 1034, 592), rectP(953, 541, 966, 582)] },
       { d: 10.4, polys: [[[0, 615], [90, 603], [200, 612], [285, 638], [302, 700], [272, 757], [0, 762]]] },
       { d: 11.8, trim: 14, polys: [[[440, 600], [446, 591], [470, 588], [612, 588], [617, 700], [602, 720], [443, 721]]] },
       { d: 12.4, polys: [[[1176, 598], [1208, 598], [1208, 536], [1300, 536], [1300, 598], [1400, 600], [1400, 702], [1178, 706]]] },
