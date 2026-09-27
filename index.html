@@ -125,6 +125,7 @@
   .crosshair.dim::before { border-color: #b5a38a; }
 
   .floats { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(255,236,190,.9), rgba(255,170,80,.45)); mix-blend-mode: screen; }
   .vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(30,14,40,0) 55%, rgba(30,14,40,.42) 100%); }
   .hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(170,10,5,0) 45%, rgba(170,10,5,.7) 100%); }
   .float {
@@ -164,7 +165,7 @@
   .poster h1 { font-family: var(--display); font-weight: 400; font-size: clamp(34px, 8vw, 50px); line-height: .95; margin: 0; text-wrap: balance; }
   .poster p { margin: 0; font-size: 17px; line-height: 1.4; max-width: 34ch; }
   .poster hr { width: 100%; border: 0; border-top: 2px solid var(--ink); margin: 4px 0; opacity: .7; }
-  .rules { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 15.5px; text-align: left; width: 100%; }
+  .rules { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; font-size: 14.5px; line-height: 1.3; text-align: left; width: 100%; }
   .rules li { display: grid; grid-template-columns: 118px 1fr; gap: 10px; align-items: baseline; }
   .rules b { font-family: var(--display); font-weight: 400; font-size: 14px; letter-spacing: .04em; }
   .reward { font-family: var(--display); font-size: clamp(40px, 10vw, 58px); line-height: 1; font-variant-numeric: tabular-nums; }
@@ -191,10 +192,38 @@
   .quality button.on { background: var(--ink); color: var(--paper); }
   .quality button:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
   .qnote { font-size: 13px; opacity: .7; min-height: 1em; }
+  #startScreen .poster { gap: 8px; padding-top: 22px; }
+  #startScreen .poster p { font-size: 16px; }
   @media (max-width: 520px) {
     .poster { padding: 20px 16px; transform: none; }
     .rules li { grid-template-columns: 100px minmax(0, 1fr); }
   }
+  .bossbar { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 96px); transform: translateX(-50%); width: min(360px, calc(100% - 32px)); pointer-events: none; font-family: var(--display); text-align: center; text-shadow: 0 2px 0 rgba(0,0,0,.6); }
+  .bossbar span { display: block; font-size: 16px; letter-spacing: .08em; color: var(--brass); margin-bottom: 4px; }
+  .bossbar .bar { height: 10px; border: 2px solid var(--ink); border-radius: 3px; background: rgba(30,19,12,.7); overflow: hidden; }
+  .bossbar i { display: block; height: 100%; width: 100%; background: linear-gradient(#e2573a, #9c2412); transition: width .2s; }
+  .rbar { position: absolute; left: 0; bottom: 42px; width: 150px; height: 8px; border: 2px solid var(--ink); border-radius: 3px; background: rgba(30,19,12,.7); }
+  .rbar .zone { position: absolute; top: 0; bottom: 0; left: 36%; width: 24%; background: var(--brass); }
+  .rbar .mark { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: #fff3d6; box-shadow: 0 0 0 1px var(--ink); left: 0; }
+  .ammo .hint.good { color: #bfe8c8; opacity: 1; }
+  .wanted { pointer-events: none; background: rgba(14,9,6,.45); }
+  .wanted .poster { width: min(360px, 100%); gap: 8px; }
+  .wanted .poster h1 { font-size: clamp(30px, 7vw, 44px); }
+  .wanted img { height: min(30vh, 240px); max-width: 100%; object-fit: contain; filter: sepia(.9) contrast(1.15) brightness(.9); mix-blend-mode: multiply; }
+  .wanted .kicker { font-size: 22px; letter-spacing: .25em; }
+  .wanted p { font-size: 15px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .btn.alt { background: transparent; color: var(--ink); box-shadow: 0 4px 0 var(--ink); border: 2px solid var(--ink); }
+  .notes { list-style: none; margin: 0; padding: 0; font-size: 15px; line-height: 1.35; display: grid; gap: 2px; }
+  .board { width: 100%; display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
+  .board form { display: flex; gap: 6px; }
+  .board input { flex: 1; min-width: 0; font: 16px var(--body); padding: 6px 8px; border: 2px solid var(--ink); border-radius: 3px; background: rgba(255,255,255,.35); color: var(--ink); }
+  .board button { font: 15px var(--display); padding: 6px 10px; border: 2px solid var(--ink); border-radius: 3px; background: var(--ink); color: var(--paper); cursor: pointer; }
+  .board ol { margin: 0; padding-left: 26px; text-align: left; font-variant-numeric: tabular-nums; }
+  .board li.me { color: var(--rust); font-weight: 700; }
+  .board .bnote { font-size: 13px; opacity: .7; }
+  body.slowmo #stage canvas { filter: saturate(.5) sepia(.35) contrast(1.15); }
+  body.slowmo .vignette { background: radial-gradient(ellipse at center, rgba(30,14,10,0) 40%, rgba(30,14,10,.7) 100%); }
   @media (prefers-reduced-motion: reduce) { .poster { transform: none; } .float { animation-duration: .6s; } }
 </style>
 </head>
@@ -202,6 +231,7 @@
 <div id="stage"></div>
 <div class="vignette"></div>
 <div class="hurt" id="hurt"></div>
+<div class="flash" id="flash"></div>
 <div class="floats" id="floats"></div>
 <div class="fade" id="fade"></div>
 <div class="banner" id="banner"><b id="bannerTitle"></b><span id="bannerSub"></span></div>
@@ -224,7 +254,9 @@
   </div>
 </div>
 
+<div class="bossbar" id="bossBar" hidden><span id="bossName"></span><div class="bar"><i id="bossFill"></i></div></div>
 <div class="ammo">
+  <div class="rbar" id="rbar" hidden><i class="zone"></i><i class="mark" id="rmark"></i></div>
   <div class="bullets" id="bullets"></div>
   <span class="hint" id="hint">R / пробел / ПКМ — перезарядка</span>
 </div>
@@ -240,22 +272,33 @@
     <hr>
     <ul class="rules">
       <li><b>Клик</b><span>выстрел, в барабане 6 патронов</span></li>
-      <li><b>R, пробел, ПКМ</b><span>перезарядка</span></li>
-      <li><b>M или ♪</b><span>музыка вкл/выкл</span></li>
-      <li><b>В голову</b><span>больше денег, серия умножает до ×5</span></li>
-      <li><b>Бандит</b><span>в красном платке, $100 / $250 в голову</span></li>
-      <li><b>Бородач Хэнк</b><span>стреляет быстрее, $150 / $350</span></li>
-      <li><b>Бутылки</b><span>на коновязях и полках бара, +$50 за каждую</span></li>
-      <li><b>Фонари</b><span>качаются от выстрелов рядом, от попадания бьются и горят, +$25</span></li>
+      <li><b>R, пробел, ПКМ</b><span>перезарядка; нажми ещё раз в золотой зоне — барабан сразу полный</span></li>
+      <li><b>В голову</b><span>больше денег; серия до ×5, на ×5 время замедляется</span></li>
+      <li><b>Бандиты</b><span>$100–150, в голову $250–350</span></li>
       <li><b>Шериф</b><span>с поднятыми руками — свой. Попадёшь — минус жизнь</span></li>
+      <li><b>Главарь</b><span>в конце каждой локации: несколько попаданий, меняет укрытия</span></li>
+      <li><b>Подрывник</b><span>сними его или сбей шашку в воздухе</span></li>
+      <li><b>Заложник</b><span>бандит прячется за шерифом — только в голову</span></li>
+      <li><b>Бочки «ПОРОХ»</b><span>взрываются и валят всех рядом</span></li>
+      <li><b>Фонари, бутылки</b><span>+$25 / +$50; горящее масло поджигает бандитов</span></li>
     </ul>
     <div class="quality" id="quality" role="group" aria-label="Качество графики">
       <span>Графика</span>
       <button type="button" data-q="auto">Авто</button><button type="button" data-q="low">Низкая</button><button type="button" data-q="medium">Средняя</button><button type="button" data-q="high">Высокая</button>
     </div>
     <span class="qnote" id="qnote"></span>
-    <button class="btn" id="startBtn" type="button" disabled>К бою</button>
+    <div class="btns"><button class="btn" id="startBtn" type="button" disabled>К бою</button><button class="btn alt" id="duelBtn" type="button" disabled>Дуэль в полдень</button></div>
     <span class="loading" id="loading">Строим улицу…</span>
+  </div>
+</div>
+
+<div class="overlay wanted" id="wanted" hidden>
+  <div class="poster">
+    <span class="kicker">Разыскивается</span>
+    <img id="wImg" alt="">
+    <h1 id="wName"></h1>
+    <div class="reward" id="wReward"></div>
+    <p id="wLoc"></p>
   </div>
 </div>
 
@@ -265,11 +308,22 @@
     <h1>Итог дня</h1>
     <div class="reward" id="finalScore">$0</div>
     <div class="stats">
-      <div><span>Бандитов</span><strong id="statKills">0</strong></div>
-      <div><span>Точность</span><strong id="statAcc">0%</strong></div>
+      <div><span id="statKillsL">Бандитов</span><strong id="statKills">0</strong></div>
+      <div><span id="statAccL">Точность</span><strong id="statAcc">0%</strong></div>
       <div><span>Рекорд</span><strong id="statBest">$0</strong></div>
     </div>
-    <button class="btn" id="againBtn" type="button">Ещё раз</button>
+    <div class="stats" id="stats2">
+      <div><span id="statHeadsL">В голову</span><strong id="statHeads">0</strong></div>
+      <div><span id="statComboL">Лучшая серия</span><strong id="statCombo">×1</strong></div>
+      <div id="statBossesB"><span id="statBossesL">Главарей</span><strong id="statBosses">0</strong></div>
+    </div>
+    <ul class="notes" id="notes" hidden></ul>
+    <div class="board" id="board" hidden>
+      <form id="boardForm"><input id="boardName" maxlength="16" placeholder="Твоё имя для таблицы" autocomplete="nickname"><button type="submit" id="boardSend">В таблицу</button></form>
+      <ol id="boardList"></ol>
+      <span class="bnote" id="boardNote"></span>
+    </div>
+    <div class="btns"><button class="btn" id="againBtn" type="button">Ещё раз</button><button class="btn alt" id="menuBtn" type="button">В меню</button></div>
   </div>
 </div>
 
@@ -1535,6 +1589,8 @@ const VARIANTS = {
   outlaw:     { pts: [100, 250], fuse: 1.0, hp: 1, scale: 1.14, label: '', cut: 'bandit' },
   annie:      { pts: [150, 350], fuse: 0.8, hp: 1, scale: 1.14, label: 'Бородач Хэнк: ', cut: 'gunman' },
   sheriff:    { scale: 1.12, cut: 'sheriff' },
+  dynamiter:  { pts: [200, 450], fuse: 1.3, hp: 1, scale: 1.14, label: 'Подрывник: ', cut: 'bandit' },
+  hostage:    { pts: [300, 600], fuse: 1.0, hp: 1, scale: 1.14, label: 'Бандит с заложником: ', cut: 'bandit' },
 };
 const INNOCENT = new Set(['lady', 'barkeep', 'sheriff']);
 function buildCharacterRaw(kind) {
@@ -2490,7 +2546,7 @@ $('musicBtn').addEventListener('click', e => { e.stopPropagation(); musicToggle(
 addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat) musicToggle(); });
 
 // ================= game state =================
-const RELOAD = 0.45;
+const RELOAD = 1.0;
 let state = 'menu';
 let enemies = [];
 let score = 0, lives = 3, combo = 1, kills = 0, shots = 0, hits = 0, level = 1;
@@ -2508,8 +2564,11 @@ function updateHud() {
   $('level').textContent = level;
   $('lives').innerHTML = [0, 1, 2].map(i => `<span class="${i < lives ? '' : 'lost'}">★</span>`).join('');
   [...bulletsEl.children].forEach((b, i) => b.classList.toggle('spent', i >= ammo));
+  if (combo === 1) btUsed = false;
   const hint = $('hint');
-  if (reloading > 0) { hint.textContent = 'Заряжаю…'; hint.classList.remove('warn'); }
+  if (performance.now() < hintLock) return;
+  hint.className = 'hint';
+  if (reloading > 0) { hint.textContent = 'Жми ещё раз в золотой зоне'; }
   else if (ammo === 0) { hint.textContent = 'Пусто! Перезарядись'; hint.classList.add('warn'); }
   else { hint.textContent = 'R / пробел / ПКМ — перезарядка'; hint.classList.remove('warn'); }
 }
@@ -2581,7 +2640,7 @@ function spawn(forceSlot, forceKind) {
   const free = slots.filter(s => !s.busy && s.loc === loc && s.visible !== false);
   if (!free.length) return null;
   const slot = forceSlot || pick(free);
-  let kind = forceKind || pickOutlaw();
+  let kind = forceKind || pickKind(slot);
   if (!forceKind && (slot.type === 'window' || slot.type === 'door') && Math.random() < (level < 2 ? 0.12 : 0.2)) kind = 'sheriff';
   slot.busy = true;
   const c = buildCharacter(kind);
@@ -2639,6 +2698,8 @@ function spawn(forceSlot, forceKind) {
   }
   enemies.push(e);
   placeEnemy(e);
+  if (kind === 'dynamiter') armDynamite(e);
+  if (kind === 'hostage') attachHostage(e);
   return e;
 }
 const RISE_T = 0.5;
@@ -2692,15 +2753,18 @@ function placeEnemy(e) {
   g.rotation.z = Math.sin(time * 1.3 + e.seed) * 0.025 * idle;
   if (e.c.extra.parasol) e.c.extra.parasol.rotation.y = time * 1.5;
   groundDoorFeet(e);
+  placeExtra(e);
 }
 function removeEnemy(e) { scene.remove(e.c.group); e.slot.busy = false; (e.mats || []).forEach(m => m.dispose()); }
 
 // ================= shooting =================
 const ray = new T.Raycaster();
 function shoot() {
+  if (state === 'intro') { introT = Math.min(introT, 0.15); return; }
   if (state !== 'play' || reloading > 0) return;
+  if (mode === 'duel' && duel.phase !== 'draw') { if (duel.phase === 'wait' || duel.phase === 'enter') duelFoul(); return; }
   if (ammo <= 0) { tick(900, 0, 0.3); return; }
-  ammo--; shots++; kick = 1; cylSpin += Math.PI / 3;
+  ammo--; shots++; LS.shots++; kick = 1; cylSpin += Math.PI / 3;
   gunSound();
 
   ray.setFromCamera(pointer, camera);
@@ -2708,14 +2772,16 @@ function shoot() {
   let hit = firstSolid(ray.intersectObjects(targets, false));
   const lampHit = firstSolid(ray.intersectObjects(LAMP_MESHES.filter(m => !m.userData.lamp.broken), false));
   if (lampHit && (!hit || lampHit.distance < hit.distance + 0.3) && !(hit && hit.object.userData.enemy)) {
-    breakLamp(lampHit.object.userData.lamp, lampHit.point);
+    breakLamp(lampHit.object.userData.lamp, lampHit.point); ST.lamps++;
     score += 25; floatText(lampHit.point, '+$25', '#ffd08a'); updateHud(); return;
   }
+  const dynHit = DYN_HB.length ? ray.intersectObjects(DYN_HB, false)[0] : null;
+  if (dynHit && (!hit || dynHit.distance < hit.distance + 0.5)) { shootDynamite(dynHit.object.userData.dyn); updateHud(); return; }
   const leafHit = firstSolid(ray.intersectObjects(LEAF_MESHES, false));
   const aimedAtLeaf = leafHit && (!hit || leafHit.distance < hit.distance);
   if (aimedAtLeaf) hit = leafHit;
   // Keep deliberate shots at characters and interactive scenery; assist only a miss.
-  const directTarget = hit && (paintedLampAt(hit) || paintedBottleAt(hit) || hit.object.userData.enemy || hit.object.userData.bottle || hit.object.userData.glass || hit.object.userData.leaf);
+  const directTarget = hit && (kegAt(hit) || paintedLampAt(hit) || paintedBottleAt(hit) || hit.object.userData.enemy || hit.object.userData.bottle || hit.object.userData.glass || hit.object.userData.leaf);
   if (!directTarget && !aimedAtLeaf) hit = assist(targets) || hit;
   if (aimedAtLeaf && !(hit && hit.object.userData.enemy)) {
     leafHit.object.userData.leaf.vel += 3.5;
@@ -2728,14 +2794,17 @@ function shoot() {
   if (e) {
     const part = o.userData.part;
     const dir = hit.point.clone().sub(camera.position).normalize();
-    if (INNOCENT.has(e.kind)) {
+    if (e.hostage && e.hostage.captor === e && part !== 'head') {
+      e.flinch = 0.5; combo = 1; floatText(hit.point, 'Только в голову!', '#ffd08a'); thud(pan);
+    } else if (e.boss) {
+      if (part === 'head') { ST.heads++; LS.heads++; }
+      bossDamage(e, part === 'head' ? 2 : 1, part, hit.point, dir);
+    } else if (INNOCENT.has(e.kind)) {
       e.phase = 'dead'; e.t = 0;
       gore(e, part, hit.point, dir);
-      combo = 1;
-      floatText(hit.point, e.kind === 'sheriff' ? 'Это же шериф!' : e.kind === 'lady' ? 'Это же миссис Хопкинс!' : 'Бармен ни при чём!', '#ff9a7a');
-      hurt(false);
+      innocentHit(e, hit.point);
     } else if (part === 'body' && e.hp > 1) {
-      e.hp--; e.flinch = 1;
+      e.hp--; e.flinch = 1; LS.hits++;
       spawnSprite(puffTex, hit.point, { size: 0.35, life: 0.5, grow: 1.6, color: 0x7a0000, opacity: 0.9 });
       playSample(['splat'], 0.65, pan); setTimeout(() => groan(pan, 0.7), 60);
       emitBlood(hit.point, dir, 50, 6, 0.6, 1.2); e.aim = Math.min(e.aim, 0.2); e.t = Math.min(e.t, e.fuse * 0.3);
@@ -2743,28 +2812,31 @@ function shoot() {
       floatText(hit.point, 'Ещё стоит!', '#f3e3bf');
     } else {
       e.phase = 'dead'; e.t = 0;
-      hits++; kills++; locKills++;
+      hits++; kills++; locKills++; LS.hits++;
+      if (part === 'head') { ST.heads++; LS.heads++; }
       gore(e, part, hit.point, dir);
-      const pts = e.V.pts[part === 'head' ? 1 : 0] * combo;
+      const pts = e.V.pts[part === 'head' ? 1 : 0] * combo * (e.runMoving ? 2 : 1);
       score += pts;
-      floatText(hit.point, e.V.label + (part === 'head' ? 'в голову! ' : '') + '+$' + pts, part === 'head' ? '#ffd46b' : '#f3e3bf');
-      combo = Math.min(5, combo + 1);
-      level = 1 + Math.floor(kills / 8);
+      floatText(hit.point, (e.runMoving ? 'На бегу! ' : e.V.label) + (part === 'head' ? 'в голову! ' : '') + '+$' + pts, part === 'head' ? '#ffd46b' : '#f3e3bf');
+      comboUp();
       thud(pan);
+      afterKill(e);
     }
   } else if (o.userData.bottle) {
     const bs = o.userData.bottle;
     const wp = new T.Vector3(); o.getWorldPosition(wp); wp.y += 0.12;
     burst(wp, o.material, shardGeo, 14, 3);
-    bs.grp.remove(o); staticHits.splice(staticHits.indexOf(o), 1); bs.mesh = null; bs.timer = 18;
+    bs.grp.remove(o); staticHits.splice(staticHits.indexOf(o), 1); bs.mesh = null; bs.timer = 18; ST.bottles++;
     glassSound(pan);
     score += 50; floatText(wp, '+$50', '#bfe8c8');
+  } else if (kegAt(hit)) {
+    explodeKeg(kegAt(hit));
   } else if (paintedLampAt(hit)) {
-    breakPaintedLamp(paintedLampAt(hit));
+    breakPaintedLamp(paintedLampAt(hit)); ST.lamps++;
     score += 25; floatText(hit.point, '+$25', '#ffd08a');
   } else if (paintedBottleAt(hit)) {
     const pb = paintedBottleAt(hit), n = hitNormal(hit, ray.ray.direction);
-    shatterPaintedBottle(pb);
+    shatterPaintedBottle(pb); ST.bottles++;
     const gm = new T.MeshStandardMaterial({ color: pb.b[4], roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.85 });
     burst(hit.point.clone().addScaledVector(n, 0.05), gm, shardGeo, 16, 2.6, n);
     spawnSprite(puffTex, hit.point, { size: 0.2, life: 0.4, grow: 1.5, color: 0xe8e0d0, opacity: 0.5 });
@@ -2811,9 +2883,20 @@ function assist(targets) {
   }
   return null;
 }
+function activeReload() {
+  if (reloadTried) return; reloadTried = true;
+  const p = 1 - reloading / reloadTotal;
+  if (p >= 0.36 && p <= 0.6) { reloading = 0; ammo = 6; ST.perfect++; tick(2600, 0, 0.22); tick(3300, 0.05, 0.18); hintFlash('Идеально!', 'good'); }
+  else { reloading += 0.5; reloadTotal += 0.5; tick(240, 0, 0.35); tick(200, 0.06, 0.3); hintFlash('Заело!', 'warn'); }
+  updateHud();
+}
+let hintLock = 0;
+function hintFlash(text, cls) { const h = $('hint'); hintLock = performance.now() + 700; h.textContent = text; h.className = 'hint ' + cls; }
 function reload() {
-  if (state !== 'play' || reloading > 0 || ammo === 6) return;
-  reloading = RELOAD;
+  if (state !== 'play') return;
+  if (reloading > 0) { activeReload(); return; }
+  if (ammo === 6) return;
+  reloading = reloadTotal = RELOAD; reloadTried = false;
   if (!playSample(['reload'], 0.9)) {
     for (let i = 0; i < 6 - ammo; i++) tick(2200 - i * 60, 0.04 + i * 0.055, 0.12);
     tick(700, RELOAD - 0.05, 0.3);
@@ -2821,6 +2904,7 @@ function reload() {
   updateHud();
 }
 function hurt(fromShot = true, pan = 0) {
+  if (state !== 'play') return;
   lives--; shake = 0.3; hurtFx = 1; combo = 1;
   if (fromShot) gunSound(0.8, 1500, pan);
   updateHud();
@@ -2841,13 +2925,17 @@ function setLoc(i) {
   renderer.shadowMap.needsUpdate = true;
   resize(); camera.position.copy(camBase); camera.lookAt(LOOK);
   $('locName').textContent = L.name;
+  if (typeof resetLocState === 'function' && typeof locPhase !== 'undefined') resetLocState();
 }
 function startTravel() {
   state = 'travel'; travelT = 0; nextLoc = PLAYLIST[(PLAYLIST.indexOf(loc) + 1) % PLAYLIST.length];
-  showBanner(LOCS[loc].name + ': чисто!', 'Идём дальше: ' + LOCS[nextLoc].name);
-  setTimeout(() => { fadeEl.style.opacity = 1; }, 250);
+  if (nextLoc === PLAYLIST[0]) lap++;
+  const st = locStars();
+  showBanner(LOCS[loc].name + ': чисто! ' + starStr(st.n), 'Точность ' + Math.round(st.acc * 100) + '% · дальше: ' + LOCS[nextLoc].name);
+  setTimeout(() => { fadeEl.style.opacity = 1; }, 1000);
 }
-function startGame() {
+function startGame(m = 'arcade') {
+  resetRun(m);
   initAudio();
   musicStart();
   clearEnemies();
@@ -2859,19 +2947,23 @@ function startGame() {
   restorePaintings();
   score = 0; lives = 3; combo = 1; kills = 0; shots = 0; hits = 0; level = 1;
   ammo = 6; reloading = 0; spawnT = 1.4; shake = 0; hurtFx = 0;
-  if (loc !== PLAYLIST[0]) setLoc(PLAYLIST[0]); locKills = 0; fadeEl.style.opacity = 0; hideBanner();
-  state = 'play';
+  if (loc !== PLAYLIST[0]) setLoc(PLAYLIST[0]); resetLocState(); locKills = 0; fadeEl.style.opacity = 0; hideBanner();
   $('startScreen').hidden = true; $('overScreen').hidden = true;
+  if (mode === 'duel') { state = 'play'; clearEnemies(); duelNext(0.8); }
+  else { state = 'intro'; introT = 3.4; showWanted(); }
   updateHud();
 }
 function gameOver() {
-  state = 'over';
-  if (score > best) { best = score; try { localStorage.setItem('saloon3d-best', best); } catch (e) {} }
+  state = 'over'; slowT = 0; document.body.classList.remove('slowmo'); hideBanner(); boss = null; updateBossBar(); clearDyns();
+  const bk = mode === 'duel' ? 'saloon3d-best-duel' : 'saloon3d-best';
+  let b = +store.get(bk) || 0;
+  if (score > b) { b = score; store.set(bk, b); }
+  if (mode === 'arcade') best = b;
   $('finalScore').textContent = '$' + score.toLocaleString('ru-RU');
-  $('statKills').textContent = kills;
-  $('statAcc').textContent = (shots ? Math.round(hits / shots * 100) : 0) + '%';
-  $('statBest').textContent = '$' + best.toLocaleString('ru-RU');
-  $('overKicker').textContent = pick(['Шериф подстрелен', 'Банда взяла город', 'Солнце село']);
+  $('statBest').textContent = '$' + b.toLocaleString('ru-RU');
+  fillSummary();
+  boardShow();
+  $('overKicker').textContent = mode === 'duel' ? pick(['Полдень пробил', 'Кто-то оказался быстрее']) : pick(['Шериф подстрелен', 'Банда взяла город', 'Солнце село']);
   $('overScreen').hidden = false;
   $('againBtn').focus();
 }
@@ -2890,12 +2982,16 @@ stage.addEventListener('pointerenter', () => { pointerInside = true; });
 addEventListener('keydown', e => {
   if (state !== 'play' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.code !== 'KeyR' && e.code !== 'Space') return;
+  if (e.repeat) { e.preventDefault(); return; }
   if (e.code === 'Space' && e.target instanceof Element && e.target.closest('button')) return;
   e.preventDefault(); reload();
 });
 $('reloadBtn').addEventListener('click', reload);
-$('startBtn').addEventListener('click', startGame);
-$('againBtn').addEventListener('click', startGame);
+$('startBtn').addEventListener('click', () => startGame('arcade'));
+$('duelBtn').addEventListener('click', () => startGame('duel'));
+$('againBtn').addEventListener('click', () => startGame(mode));
+$('menuBtn').addEventListener('click', () => { $('overScreen').hidden = true; $('startScreen').hidden = false; state = 'menu'; $('startBtn').focus(); });
+const rbar = $('rbar'), rmark = $('rmark');
 
 // ================= framing =================
 let camDist = 15;
@@ -2946,14 +3042,16 @@ resize();
 camera.position.set(0, 5, camDist + 7);
 
 // ================= loop =================
-const hurtEl = $('hurt');
+const hurtEl = $('hurt'), flashEl = $('flash');
+let flashFx = 0;
 const tmpV = new T.Vector3(), aimPt = new T.Vector3(), lookPt = new T.Vector3();
-function update(dt) {
+function update(dt, realDt = dt) {
   time += dt;
   shake = Math.max(0, shake - dt);
   hurtFx = Math.max(0, hurtFx - dt * 1.6);
   kick = Math.max(0, kick - dt * 7);
   hurtEl.style.opacity = hurtFx.toFixed(3);
+  flashFx = Math.max(0, flashFx - realDt * 3); flashEl.style.opacity = flashFx.toFixed(3);
   musicTick(dt);
   for (const l of SWING_LEAVES) {
     // damped spring back to closed; leaves can swing both ways like real saloon doors
@@ -2976,7 +3074,7 @@ function update(dt) {
   ray.setFromCamera(pointer, camera);
   aimPt.copy(ray.ray.origin).addScaledVector(ray.ray.direction, 16);
   gun.lookAt(aimPt);
-  const r = reloading > 0 ? Math.sin(clamp(1 - reloading / RELOAD, 0, 1) * Math.PI) : 0;
+  const r = reloading > 0 ? Math.sin(clamp(1 - reloading / reloadTotal, 0, 1) * Math.PI) : 0;
   gun.rotateX(-kick * 0.45 + r * 0.9);
   gun.rotateZ(r * 0.8);
   gun.position.set(0, -r * 0.08, kick * 0.06);
@@ -2986,7 +3084,9 @@ function update(dt) {
   gunPivot.visible = false;
   cross.style.display = mouseSeen && pointerInside && state === 'play' ? 'block' : 'none';
   cross.classList.toggle('dim', reloading > 0 || ammo === 0);
-  cross.style.setProperty('--p', reloading > 0 ? (1 - reloading / RELOAD).toFixed(3) : 0);
+  cross.style.setProperty('--p', reloading > 0 ? (1 - reloading / reloadTotal).toFixed(3) : 0);
+  rbar.hidden = !(reloading > 0 && state === 'play');
+  if (reloading > 0) rmark.style.left = (clamp(1 - reloading / reloadTotal, 0, 1) * 100).toFixed(1) + '%';
 
   for (let i = sprites.length - 1; i >= 0; i--) {
     const s = sprites[i]; s.t += dt;
@@ -3045,22 +3145,26 @@ function update(dt) {
   });
 
   if (state === 'dying') { overT -= dt; if (overT <= 0) gameOver(); }
-  if (reloading > 0) { reloading -= dt; if (reloading <= 0) { reloading = 0; ammo = 6; updateHud(); } }
+  if (reloading > 0) { reloading -= realDt; if (reloading <= 0) { reloading = 0; ammo = 6; updateHud(); } }
 
-  if (state === 'play' && locKills >= LOCS[loc].quota && !enemies.some(e => e.phase === 'up' || e.phase === 'rise')) startTravel();
   if (state === 'travel') {
-    travelT += dt;
-    if (travelT >= 0.75 && nextLoc !== loc) { setLoc(nextLoc); showBanner(LOCS[loc].name, LOCS[loc].sub); fadeEl.style.opacity = 0; }
-    if (travelT >= 2.4) { hideBanner(); state = 'play'; spawnT = 0.6; }
+    travelT += realDt;
+    if (travelT >= 1.7) { setLoc(nextLoc); hideBanner(); fadeEl.style.opacity = 0; showWanted(); state = 'intro'; introT = 3.2; }
   }
-  if (state === 'play') {
-    const d = difficulty();
+  if (state === 'intro') { introT -= realDt; if (introT <= 0) { hideWanted(); state = 'play'; spawnT = 0.6; } }
+  if (state === 'play' && mode === 'duel') duelUpdate(dt);
+  else if (state === 'play') {
+    const d = difficulty(), bossy = locPhase === 'boss';
     spawnT -= dt;
     const alive = enemies.filter(e => e.phase !== 'dead' && e.phase !== 'leave').length;
-    if (spawnT <= 0 && alive < d.max && locKills < LOCS[loc].quota) { spawn(); spawnT = d.gap * rand(0.7, 1.3); }
+    const want = locPhase === 'minions' ? locKills < LOCS[loc].quota : bossy;
+    if (spawnT <= 0 && alive < (bossy ? Math.min(2, d.max) : d.max) && want) { spawn(); spawnT = d.gap * rand(0.7, 1.3) * (bossy ? 1.8 : 1); }
+    arcadeTick(dt);
   }
+  updateDyns(dt);
 
   for (const e of enemies) {
+    if (preEnemy(e, dt)) continue;
     e.t += dt;
     e.flinch = Math.max(0, e.flinch - dt * 4);
     if (e.phase === 'rise' && e.riseT && !e.doorOpened && e.t > e.riseT * 0.35) { e.doorOpened = true; kickDoor(loc, e.slot.pos.x, -7); }
@@ -3069,9 +3173,12 @@ function update(dt) {
     if (e.riseT && e.phase === 'leave' && e.t > e.riseT * 0.45 && e.t < e.riseT * 0.95) holdDoor(loc, e.slot.pos.x, 1);
     if (e.phase === 'rise' && e.t >= (e.riseT || RISE_T)) { e.phase = 'up'; e.t = 0; }
     else if (e.phase === 'up' && state !== 'menu') {
-      if (e.c.rightArm && !INNOCENT.has(e.kind)) {
+      if (e.dyn) dynUp(e, dt);
+      else if (e.c.rightArm && !INNOCENT.has(e.kind)) {
         e.aim = clamp((e.t - e.fuse * 0.35) / (e.fuse * 0.5), 0, 1);
         if (e.aim > 0.15 && !e.cocked && state === 'play') { e.cocked = true; cockSound(panOf(e.c.group.position)); }
+        // shooters up high give themselves away: a glint just before they fire
+        if (e.aim > 0.55 && !e.glint && state === 'play' && (e.slot.type === 'roof' || e.slot.pos.y > 2)) { e.glint = true; const hp = new T.Vector3(); e.c.head.getWorldPosition(hp); spawnSprite(glowTex, hp, { size: 1.1, life: 0.3, add: true, color: 0xfff0c0 }); }
         if (e.t >= e.fuse && state === 'play') {
           const mp = new T.Vector3(); e.c.muzzle.getWorldPosition(mp);
           spawnSprite(glowTex, mp, { size: 1.2, life: 0.09, add: true });
@@ -3079,6 +3186,7 @@ function update(dt) {
           floatText(mp, 'БАХ!', '#ff7b5a');
           hurt(true, panOf(mp));
           e.phase = 'leave'; e.t = -0.45;
+          afterShot(e);
         }
       } else if (e.t >= e.stay) { e.phase = 'leave'; e.t = 0; }
     }
@@ -3086,7 +3194,7 @@ function update(dt) {
     else if (e.phase === 'dead') {
       e.aim = Math.max(0, e.aim - dt * 4);
       if (e.slot.type === 'door' && !e.doorHit && e.t > 0.2) { e.doorHit = true; kickDoor(loc, e.slot.pos.x, 7); }
-      if (LOCS[loc].painted) {
+      if (LOCS[loc].painted && !e.run) {
         // Collapse within the opening: rotating around the feet pushes the upper
         // body through a flat facade and exposes the legs in neighbouring holes.
         const k = clamp(e.t / 0.25, 0, 1), q = clamp((e.t - 0.12) / 0.78, 0, 1);
@@ -3101,7 +3209,10 @@ function update(dt) {
     }
     placeEnemy(e);
   }
-  enemies = enemies.filter(e => { if (e.gone) removeEnemy(e); return !e.gone; });
+  enemies = enemies.filter(e => {
+    if (e.gone) { if (boss && boss.e === e) { boss.e = null; bossRespawnT = rand(0.5, 1.1); } removeEnemy(e); }
+    return !e.gone;
+  });
 }
 
 // ================= painted locations: the concept paintings as layered 3D sets =================
@@ -3231,6 +3342,7 @@ function shatterPaintedBottle(pb) {
 function restorePaintings() {
   for (const P of Object.values(PAINT)) if (P.broken.size) { P.g.drawImage(P.img, 0, 0); P.broken.clear(); P.tex.needsUpdate = true; }
   resetPaintedLamps();
+  paintKegs();
 }
 const SWING_LEAVES = [], LEAF_MESHES = [], SWING_DOORS = [];
 // push both leaves of the batwing door nearest to world x (inward = away from the camera)
@@ -3478,7 +3590,7 @@ function startFire(p, o) {
   const glow = new T.Sprite(new T.SpriteMaterial({ map: glowTex, color: 0xff8a3a, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0 }));
   glow.position.y = o.h * 0.35; glow.scale.setScalar(Math.max(0.6, o.w * 4)); grp.add(glow);
   const f = { grp, cards, glow, p: p.clone(), from: o.from ? o.from.clone() : null, fall: 0, t: 0, life: o.life, w: o.w, h: o.h,
-    fadeIn: o.fadeIn ?? 0.4, smoke: o.smoke ?? 1, embers: o.embers ?? 1, seed: rand(0, 9), loc };
+    fadeIn: o.fadeIn ?? 0.4, smoke: o.smoke ?? 1, embers: o.embers ?? 1, pop: !!o.pop, seed: rand(0, 9), loc };
   if (f.from) f.fall = Math.sqrt(2 * Math.max(0.05, f.from.y - p.y) / 9.8);
   if (o.dieOnLand) f.life = f.fall + rand(0, 0.05);
   FIRES.push(f); return f;
@@ -3503,8 +3615,9 @@ function updateFires(dt) {
       const tt = f.t - f.fall, end = Math.min(1, (f.life - f.t) / Math.min(2.5, f.life * 0.5));
       if (f.from) G.position.copy(f.p);
       amp = Math.min(1, tt / f.fadeIn) * (0.45 + 0.55 * end);
-      s = (0.35 + 0.65 * Math.min(1, tt / Math.max(f.fadeIn, 0.5))) * (0.4 + 0.6 * end);
+      s = f.pop ? (0.75 + tt * 1.4) * (0.5 + 0.5 * end) : (0.35 + 0.65 * Math.min(1, tt / Math.max(f.fadeIn, 0.5))) * (0.4 + 0.6 * end);
       if (end < 0.05) amp *= end / 0.05;
+      if (f.w >= 0.5 && f.life > 3 && end > 0.3 && tt > 0.3) burnNear(f.p, 1.3);
     }
     G.scale.setScalar(s);
     f.cards.forEach((c, k) => { c.material.uniforms.uTime.value = time; c.material.uniforms.uAmp.value = amp * flick * (1 + 0.12 * Math.sin(time * (5 + k * 2.3) + f.seed * (k + 1))); });
@@ -3521,7 +3634,7 @@ const LAMPS = [], LAMP_MESHES = [];
 let millRotor = null, millSpin = 0.9;
 const flameTex = spriteTex(g => { const gr = g.createRadialGradient(64, 78, 0, 64, 70, 60); gr.addColorStop(0, 'rgba(255,245,200,1)'); gr.addColorStop(0.25, 'rgba(255,190,70,.95)'); gr.addColorStop(0.6, 'rgba(230,80,20,.45)'); gr.addColorStop(1, 'rgba(160,30,0,0)'); g.fillStyle = gr; g.beginPath(); g.ellipse(64, 72, 38, 58, 0, 0, 7); g.fill(); });
 {
-  const P = PAINTED.find(p => p.key === 'street'), li = LOCS.findIndex(l => l.name === P.name), PR0 = window.PROPS;
+  const P = PAINTED.find(p => p.key === 'street'), li = LOCS.findIndex(l => l.painted && l.name === P.name), PR0 = window.PROPS;
   const loadTex = async src => { const img = new Image(); img.src = src; await img.decode(); const t = new T.Texture(img); t.colorSpace = T.SRGBColorSpace; t.anisotropy = maxAniso; t.needsUpdate = true; return { t, img }; };
   const W2 = (u, v, d) => new T.Vector3(P.x + (u - PCX) * d / PF, P.h + (PCY - v) * d / PF, -d);
   if (PR0) {
@@ -3709,6 +3822,526 @@ function breakPaintedLamp(pl) {
   renderer.shadowMap.needsUpdate = true;
 }
 
+// ================= game modes: bosses, special outlaws, explosives, bullet time, noon duel, stars =================
+let mode = 'arcade', locPhase = 'minions', boss = null, bossRespawnT = 0, bossVisits = 0, slowT = 0, introT = 0, runnerT = 10, lap = 0, btUsed = false;
+let reloadTotal = RELOAD, reloadTried = false;
+const newStats = () => ({ heads: 0, bestCombo: 1, innocents: {}, lamps: 0, bottles: 0, kegs: 0, bosses: 0, stars: [], dynAir: 0, saved: 0, burned: 0, perfect: 0 });
+let ST = newStats();
+let LS = { shots: 0, hits: 0, heads: 0, innocents: 0 };
+const duel = { round: 1, phase: 'off', t: 0, delay: 0, waitT: 0, ticks: 0, wins: 0, best: 0, opp: null, drawAt: 0 };
+const locKey = () => (PAINTED.find(p => p.name === LOCS[loc].name) || {}).key;
+const V3 = (x, y, z) => new T.Vector3(x, y, z);
+
+// ---- sounds ----
+function boomSound(pan = 0, vol = 1) {
+  if (!ac) return;
+  const t = ac.currentTime, dst = out(pan);
+  const n = ac.createBufferSource(); n.buffer = noiseBuf;
+  const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(90, t + 1.4);
+  const g = ac.createGain(); g.gain.setValueAtTime(1.1 * vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
+  n.connect(f).connect(g).connect(dst); n.start(t); n.stop(t + 1.2);
+  const o = ac.createOscillator(); o.frequency.setValueAtTime(80, t); o.frequency.exponentialRampToValueAtTime(24, t + 0.6);
+  const og = ac.createGain(); og.gain.setValueAtTime(1.0 * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  o.connect(og).connect(dst); o.start(t); o.stop(t + 0.72);
+}
+function bellSound(vol = 0.35) {
+  if (!ac) return;
+  const t = ac.currentTime;
+  [[523, 1], [1046, 0.5], [1569, 0.25], [2350, 0.12]].forEach(([fq, k]) => {
+    const o = ac.createOscillator(); o.frequency.value = fq;
+    const g = ac.createGain(); g.gain.setValueAtTime(vol * k, t); g.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
+    o.connect(g).connect(out(0)); o.start(t); o.stop(t + 2.3);
+  });
+}
+function hissSound(pan = 0, dur = 0.8) {
+  if (!ac) return;
+  const t = ac.currentTime, n = ac.createBufferSource(); n.buffer = noiseBuf;
+  const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 3500;
+  const g = ac.createGain(); g.gain.setValueAtTime(0.001, t); g.gain.linearRampToValueAtTime(0.09, t + 0.05); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  n.connect(f).connect(g).connect(out(pan)); n.start(t); n.stop(t + dur + 0.05);
+}
+
+// ---- explosions ----
+function explode(p, o = {}) {
+  const R = o.radius ?? 2.6, big = o.size ?? 1;
+  shake = Math.max(shake, 0.45 * big); boomSound(panOf(p), Math.min(1, 0.6 + big * 0.4));
+  flashFx = Math.max(flashFx, 0.55 * Math.min(1, big));
+  // white-hot flash, then an expanding fireball that rolls up into black smoke
+  spawnSprite(glowTex, p.clone(), { size: 7 * big, life: 0.22, add: true, color: 0xfff0c8 });
+  spawnSprite(glowTex, p.clone(), { size: 4 * big, life: 0.6, add: true, color: 0xff9030, grow: 0.6 });
+  for (let i = 0; i < 3; i++) startFire(p.clone().add(V3(rand(-0.35, 0.35) * big, -0.6 * big + rand(0, 0.3), 0.05 + i * 0.02)), { w: rand(1.1, 1.6) * big, h: rand(1.4, 2.0) * big, life: rand(0.7, 1.0), fadeIn: 0.02, smoke: 0.5, embers: 3, pop: true });
+  for (let i = 0; i < 10; i++) spawnSprite(flameTex, p.clone().add(V3(rand(-0.4, 0.4), rand(-0.3, 0.4), 0.1).multiplyScalar(big)), { size: rand(0.5, 0.9) * big, life: rand(0.25, 0.5), grow: 1.5, add: true, color: pick([0xffd080, 0xffa040, 0xff7020]), vel: V3(rand(-2.5, 2.5), rand(0.5, 3), 0).multiplyScalar(big) });
+  for (let i = 0; i < 12; i++) spawnSprite(puffTex, p.clone().add(V3(rand(-0.5, 0.5), rand(-0.1, 0.7), 0.05).multiplyScalar(big)), { size: rand(0.6, 1.1) * big, life: rand(1.8, 3.2), grow: 2.6, color: pick([0x2a221c, 0x3a3029, 0x4d4239, 0x5a4e44]), opacity: 0.4, fadeIn: 0.35, vel: V3(rand(-1, 1), rand(0.5, 1.5), rand(-0.2, 0.4)) });
+  // dust kicked along the ground
+  for (let i = 0; i < 8; i++) spawnSprite(puffTex, V3(p.x + rand(-0.3, 0.3), p.y - 0.6 * big, p.z + 0.1), { size: 0.5 * big, life: rand(0.8, 1.4), grow: 2.2, color: 0xb89470, opacity: 0.45, vel: V3((i < 4 ? -1 : 1) * rand(1.5, 3.2), rand(0, 0.4), 0) });
+  for (let i = 0; i < 12; i++) spawnSprite(glowTex, p.clone(), { size: rand(0.03, 0.06), life: rand(0.5, 1.1), add: true, color: pick([0xffb050, 0xffd080]), vel: V3(rand(-4, 4), rand(1, 5), rand(-1, 2)) });
+  burst(p.clone(), trimMat(0x6b4a2c), splinterGeo, 16, 5);
+  if (!R) return;
+  for (const e of enemies) {
+    if (e.phase === 'dead' || e.gone) continue;
+    const gp = e.c.group.position;
+    if (Math.hypot(gp.x - p.x, gp.z - p.z, (gp.y + 1 - p.y) * 0.5) <= R) blastKill(e, p, o.why || 'Взрыв!');
+  }
+}
+// someone caught by a blast or burning oil
+function blastKill(e, p, why) {
+  const point = e.c.group.position.clone().add(V3(0, 1.3, 0.15)), dir = point.clone().sub(p).setY(0.4).normalize();
+  if (e.boss) { bossDamage(e, 3, 'body', point, dir); return; }
+  e.phase = 'dead'; e.t = 0; gore(e, 'body', point, dir);
+  if (INNOCENT.has(e.kind)) { innocentHit(e, point); return; }
+  kills++; locKills++; hits++;
+  const pts = (e.V.pts ? e.V.pts[0] : 100) * combo; score += pts;
+  floatText(point, why + ' +$' + pts, '#ffc070');
+  afterKill(e);
+  updateHud();
+}
+function innocentHit(e, point) {
+  combo = 1; LS.innocents++; ST.innocents[e.kind] = (ST.innocents[e.kind] || 0) + 1;
+  if (e.captor) { e.captor.hostage = null; e.captor = null; }
+  floatText(point, e.kind === 'sheriff' ? 'Это же шериф!' : e.kind === 'lady' ? 'Это же миссис Хопкинс!' : 'Бармен ни при чём!', '#ff9a7a');
+  hurt(false);
+  updateHud();
+}
+// bookkeeping after any outlaw goes down
+function afterKill(e) {
+  level = mode === 'duel' ? level : 1 + Math.floor(kills / 8);
+  if (e.dyn && e.dyn.held) dropDynamite(e);
+  if (e.hostage && e.hostage.captor === e) {
+    const h = e.hostage; h.captor = null; e.hostage = null;
+    if (h.phase !== 'dead') { h.phase = 'leave'; h.t = 0; ST.saved++; score += 300; const hp = h.c.group.position.clone().add(V3(0, 2.2, 0)); floatText(hp, 'Заложник спасён! +$300', '#bfe8c8'); }
+  }
+  if (e.duel) duelWin(e);
+  updateHud();
+}
+function comboUp() {
+  combo = Math.min(5, combo + 1); ST.bestCombo = Math.max(ST.bestCombo, combo);
+  if (combo === 5 && !btUsed && mode === 'arcade') {
+    btUsed = true; slowT = 3; document.body.classList.add('slowmo');
+    showBanner('Мёртвый глаз', 'Серия ×5: время замедлилось'); setTimeout(() => { if (state === 'play') hideBanner(); }, 1100);
+    boomSound(0, 0.25);
+  }
+}
+
+// ---- powder kegs painted into the scenes ----
+const KEGS = {
+  street: [{ c: [490, 655], r: [50, 64], d: 11.8, label: 'ПОРОХ', fs: 19 }],
+  saloon: [{ c: [382, 487], r: [16, 17], d: 11.5, label: 'XXX', fs: 9 }],
+  canyon: [{ c: [695, 535], r: [70, 50], d: 8.9, label: 'ДИНАМИТ', fs: 20 }],
+};
+function paintKegs() {
+  for (const [key, list] of Object.entries(KEGS)) {
+    const g = PAINT[key] && PAINT[key].g; if (!g) continue;
+    list.forEach(k => {
+      g.save(); g.translate(k.c[0], k.c[1]); g.textAlign = 'center'; g.textBaseline = 'middle';
+      // stencilled in pale paint, a red danger line under it
+      g.font = `bold ${k.fs}px Georgia, serif`; g.fillStyle = 'rgba(232,212,168,.9)';
+      g.fillText(k.label, 0, -k.fs * 0.2);
+      if (k.fs > 12) { g.font = `bold ${k.fs * 0.62}px Georgia, serif`; g.fillStyle = 'rgba(205,40,22,.95)'; g.fillText('ОПАСНО', 0, k.fs * 0.85); }
+      g.restore();
+    });
+    PAINT[key].tex.needsUpdate = true;
+  }
+}
+paintKegs();
+function kegAt(hit) {
+  const key = hit.object.userData.painting, list = key && KEGS[key];
+  if (!list || !hit.uv) return null;
+  const x = hit.uv.x * PW, y = (1 - hit.uv.y) * PH;
+  const i = list.findIndex(k => ((x - k.c[0]) / k.r[0]) ** 2 + ((y - k.c[1]) / k.r[1]) ** 2 <= 1);
+  return i >= 0 && !PAINT[key].broken.has('K' + i) ? { key, i, k: list[i] } : null;
+}
+function explodeKeg({ key, i, k }) {
+  const P = PAINT[key], g = P.g; P.broken.add('K' + i); ST.kegs++;
+  // charred and split: the keg is burnt black where it stood
+  g.save(); g.globalCompositeOperation = 'multiply';
+  const gr = g.createRadialGradient(k.c[0], k.c[1], 0, k.c[0], k.c[1], Math.max(...k.r) * 1.5);
+  gr.addColorStop(0, 'rgb(40,30,26)'); gr.addColorStop(0.6, 'rgb(90,75,68)'); gr.addColorStop(1, 'rgb(255,255,255)');
+  g.fillStyle = gr; g.fillRect(k.c[0] - k.r[0] * 1.6, k.c[1] - k.r[1] * 1.6, k.r[0] * 3.2, k.r[1] * 3.2); g.restore();
+  P.tex.needsUpdate = true;
+  const p = paintedW(key, k.c[0], k.c[1], k.d - 0.3), base = paintedW(key, k.c[0], k.c[1] + k.r[1] * 0.8, k.d - 0.3);
+  const size = clamp(Math.max(...k.r) / 50, 0.45, 1.2);
+  explode(p, { radius: 1.6 + size * 1.6, size, why: 'Взрыв!' });
+  startFire(base, { w: 0.9 * size + 0.2, h: 1.1 * size + 0.3, life: 12 + rand(0, 3) });
+  score += 50; floatText(p, 'БАБАХ! +$50', '#ffc070');
+}
+
+// ---- dynamite: carried lit, thrown at the player, can be shot in the air ----
+const DYNS = [], DYN_HB = [];
+const dynMat = new T.MeshStandardMaterial({ color: 0xb3261a, roughness: 0.55, emissive: 0x3a0804 });
+const dynGeo = new T.CylinderGeometry(0.035, 0.035, 0.26, 10), dynHbGeo = new T.SphereGeometry(0.34, 8, 6);
+function makeStick() {
+  const g = new T.Group();
+  [-0.04, 0, 0.04].forEach(x => { const s = new T.Mesh(dynGeo, dynMat); s.position.x = x; g.add(s); });
+  const spark = new T.Sprite(new T.SpriteMaterial({ map: glowTex, color: 0xffd080, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+  spark.position.set(0, 0.17, 0); spark.scale.setScalar(0.16); g.add(spark); g.userData.spark = spark;
+  return g;
+}
+function armDynamite(e) {
+  const arm = e.c.leftArm; if (!arm) return;
+  const am = arm.sh.children.find(o => o.isMesh); if (!am) return;
+  if (!am.geometry.boundingBox) am.geometry.computeBoundingBox();
+  const b = am.geometry.boundingBox, stick = makeStick();
+  stick.position.set((b.min.x + b.max.x) / 2 + am.position.x, b.min.y + am.position.y + 0.1, b.max.z + am.position.z + 0.03);
+  stick.rotation.z = 0.3;
+  arm.sh.add(stick); e.dyn = { held: true, stick };
+}
+function sparkle(stick, dt) {
+  const s = stick.userData.spark; s.scale.setScalar(rand(0.1, 0.22));
+  if (Math.random() < dt * 25) { const p = new T.Vector3(); s.getWorldPosition(p); spawnSprite(glowTex, p, { size: rand(0.015, 0.03), life: rand(0.15, 0.35), add: true, color: 0xffc060, vel: V3(rand(-0.8, 0.8), rand(0.2, 1.4), rand(-0.3, 0.3)) }); }
+}
+function flyDynamite(from, to, T_, o = {}) {
+  const g = makeStick(); g.position.copy(from); scene.add(g);
+  const hb = new T.Mesh(dynHbGeo, hbMat); g.add(hb);
+  const d = { g, hb, from: from.clone(), to: to.clone(), t: 0, T: T_, arc: o.arc ?? 1.8, local: !!o.local, spin: rand(7, 12), loc };
+  hb.userData.dyn = d; DYNS.push(d); DYN_HB.push(hb); return d;
+}
+function throwDynamite(e) {
+  const from = new T.Vector3(); e.dyn.stick.getWorldPosition(from);
+  e.dyn.stick.parent.remove(e.dyn.stick); e.dyn.held = false;
+  const fwd = new T.Vector3(); camera.getWorldDirection(fwd);
+  const to = camera.position.clone().addScaledVector(fwd, 3.2).add(V3(rand(-0.6, 0.6), -0.9, 0));
+  flyDynamite(from, to, 1.35 + rand(0, 0.2));
+  hissSound(panOf(from), 1.2);
+  floatText(from, 'Динамит!', '#ffb08a');
+  e.phase = 'leave'; e.t = 0;
+}
+function dropDynamite(e) {
+  const from = new T.Vector3(); e.dyn.stick.getWorldPosition(from);
+  e.dyn.stick.parent.remove(e.dyn.stick); e.dyn.held = false;
+  flyDynamite(from, V3(from.x, Math.max(0, e.c.group.position.y), from.z + 0.2), 0.55, { arc: 0.25, local: true });
+}
+function removeDyn(d) { scene.remove(d.g); DYNS.splice(DYNS.indexOf(d), 1); DYN_HB.splice(DYN_HB.indexOf(d.hb), 1); }
+function clearDyns() { while (DYNS.length) removeDyn(DYNS[0]); }
+function shootDynamite(d) {
+  const p = d.g.position.clone(); removeDyn(d);
+  ST.dynAir++; score += 150; floatText(p, 'В воздухе! +$150', '#ffd46b');
+  explode(p, { radius: 2.2, size: 0.8, why: 'Подрыв!' });
+}
+function updateDyns(dt) {
+  for (let i = DYNS.length - 1; i >= 0; i--) {
+    const d = DYNS[i]; d.t += dt;
+    if (d.loc !== loc) { removeDyn(d); continue; }
+    const k = Math.min(1, d.t / d.T);
+    d.g.position.lerpVectors(d.from, d.to, k); d.g.position.y += Math.sin(Math.PI * k) * d.arc;
+    d.g.rotation.z += d.spin * dt; d.g.rotation.x += d.spin * 0.6 * dt;
+    sparkle(d.g, dt);
+    if (k >= 1) {
+      const p = d.g.position.clone(); removeDyn(d);
+      if (d.local) explode(p.add(V3(0, 0.4, 0)), { radius: 2.4, size: 0.9, why: 'Сам себя подорвал!' });
+      else if (state === 'play') { explode(p, { radius: 0, size: 0.7 }); floatText(p, 'БУМ!', '#ff7b5a'); hurt(false); }
+    }
+  }
+}
+
+// ---- burning oil sets on fire whoever is standing in it ----
+function burnNear(p, r) {
+  for (const e of enemies) {
+    if (e.phase === 'dead' || e.phase === 'leave' || e.gone) continue;
+    const gp = e.c.group.position;
+    if (Math.abs(gp.x - p.x) < r && Math.abs(gp.z - p.z) < 1.2 && gp.y < p.y + 1.5) {
+      ST.burned++; startFire(gp.clone().add(V3(0, 0.1, 0.25)), { w: 0.6, h: 1.8, life: 2.2, fadeIn: 0.1 });
+      blastKill(e, gp.clone().add(V3(0, 0.3, 0)), 'Поджарился!');
+    }
+  }
+}
+
+// ---- hostage takers: an outlaw hiding behind the sheriff; only a head shot ----
+function attachHostage(e) {
+  const h = spawn(e.slot, 'sheriff');
+  if (!h) return;
+  h.captor = e; h.stay = 1e9; e.hostage = h; e.fuse *= 1.4;
+  h.c.group.scale.multiplyScalar(0.94);
+}
+
+// ---- runners: dash across the open ground in front of the covers ----
+function spawnRunner(o = {}) {
+  const key = locKey(), d = o.d || { street: 8.2, saloon: 6.6, canyon: 7.6 }[key];
+  if (!d) return null;
+  const P = PAINTED.find(p => p.key === key), halfW = PCX * d / PF * Math.min(1, camera.aspect / (PW / PH)), dir = Math.random() < 0.5 ? 1 : -1;
+  const slot = { type: 'run', loc, pos: V3(P.x - dir * (halfW + (o.margin ?? 1.2)), 0, -d), hide: V3(0, 0, 0), busy: true, visible: true };
+  const e = spawn(slot, o.kind || pickOutlaw()); if (!e) return null;
+  e.phase = 'run'; e.t = 0; e.run = { dir, x1: P.x + dir * (halfW + 1.2), stopX: P.x + (o.stop ?? rand(-0.5, 0.5)) * halfW, stopped: false, v: o.v || rand(3.8, 4.6) };
+  return e;
+}
+
+// ---- bosses: one per location, several hits, moves between covers ----
+const BOSSES = {
+  street: { name: 'Пыльный Джо', kind: 'outlaw', hp: 5, reward: 1000 },
+  saloon: { name: 'Бородач Хэнк', kind: 'annie', hp: 6, reward: 1500, hostage: true },
+  canyon: { name: 'Койот Джек', kind: 'outlaw', hp: 8, reward: 2500, dyn: true, tint: 0xa8a0c8 },
+};
+const bossBar = $('bossBar');
+function updateBossBar() {
+  bossBar.hidden = !boss;
+  if (!boss) return;
+  $('bossName').textContent = boss.name;
+  $('bossFill').style.width = (Math.max(0, boss.hp) / boss.max * 100).toFixed(1) + '%';
+}
+function nameTag(text) {
+  const [c, g] = cnv(512, 96);
+  g.font = 'bold 54px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 10; g.strokeStyle = 'rgba(30,19,12,.9)'; g.strokeText(text, 256, 50);
+  g.fillStyle = '#f1c86a'; g.fillText(text, 256, 50);
+  const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace;
+  const s = new T.Sprite(new T.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  s.scale.set(2.6, 0.49, 1); s.renderOrder = 6; return s;
+}
+function startBoss() {
+  const B = BOSSES[locKey()];
+  if (!B) { locPhase = 'clear'; return; }
+  locPhase = 'boss'; bossVisits = 0;
+  boss = { ...B, hp: B.hp + lap * 2, max: B.hp + lap * 2, e: null, lastSlot: null };
+  bossRespawnT = 1.4; updateBossBar();
+  showBanner('Главарь: ' + B.name, '$' + B.reward.toLocaleString('ru-RU') + ' за голову · прячется и меняет укрытия');
+  setTimeout(() => { if (state === 'play') hideBanner(); }, 1700);
+}
+function spawnBoss() {
+  let free = slots.filter(s => !s.busy && s.loc === loc && s.visible !== false && s.type !== 'roof' && s !== boss.lastSlot);
+  if (!free.length) { bossRespawnT = 0.5; return; }
+  const slot = pick(free), e = spawn(slot, boss.kind);
+  if (!e) { bossRespawnT = 0.5; return; }
+  e.boss = boss; boss.e = e; boss.lastSlot = slot; bossVisits++;
+  e.fuse = difficulty().fuse * 1.25 * rand(0.9, 1.1); e.stay = 1e9;
+  const tag = nameTag(boss.name); tag.position.set(0, 2.85, 0); e.c.group.add(tag);
+  if (boss.tint && e.mats) e.mats.forEach(m => m.userData.base.color.multiply(new T.Color(boss.tint)));
+  if (boss.dyn && bossVisits % 2 === 0) armDynamite(e);
+  if (boss.hostage && bossVisits % 3 === 2 && (slot.type === 'door' || slot.type === 'cover')) attachHostage(e);
+}
+function bossDamage(e, dmg, part, point, dir) {
+  if (e.phase === 'dead') return;
+  boss.hp -= dmg; hits++; LS.hits++;
+  updateBossBar();
+  if (boss.hp <= 0) {
+    e.phase = 'dead'; e.t = 0; gore(e, part, point, dir);
+    kills++; ST.bosses++; score += boss.reward;
+    floatText(point, 'Главарь повержен! +$' + boss.reward.toLocaleString('ru-RU'), '#ffd46b');
+    showBanner(boss.name + ' повержен!', 'Награда $' + boss.reward.toLocaleString('ru-RU'));
+    setTimeout(() => { if (state === 'play') hideBanner(); }, 1500);
+    boss = null; locPhase = 'clear'; updateBossBar(); afterKill(e);
+    slowT = Math.max(slowT, 1.2); document.body.classList.add('slowmo');
+    return;
+  }
+  e.flinch = 1; e.aim = Math.min(e.aim, 0.15);
+  spawnSprite(puffTex, point, { size: 0.35, life: 0.5, grow: 1.6, color: 0x7a0000, opacity: 0.9 });
+  emitBlood(point, dir, 40, 5, 0.6, 1.2);
+  playSample(['splat'], 0.7, panOf(point)); setTimeout(() => groan(panOf(point), 0.8), 60);
+  floatText(point, (part === 'head' ? 'В голову! ' : '') + '−' + dmg, part === 'head' ? '#ffd46b' : '#f3e3bf');
+  // hurt, he ducks back into cover and comes up somewhere else
+  if (e.phase === 'up' && Math.random() < 0.6) { e.phase = 'leave'; e.t = 0; }
+  else e.t = Math.min(e.t, e.fuse * 0.3);
+}
+
+// ---- per-location bookkeeping and stars ----
+function resetLocState() {
+  locPhase = 'minions'; boss = null; bossRespawnT = 0; updateBossBar();
+  LS = { shots: 0, hits: 0, heads: 0, innocents: 0 };
+  clearDyns();
+}
+const STAR_KEY = 'saloon3d-stars';
+function locStars() {
+  const acc = LS.shots ? LS.hits / LS.shots : 0;
+  const n = (acc >= 0.6) + (LS.innocents === 0) + (LS.heads >= 3);
+  ST.stars.push({ name: LOCS[loc].name, n, acc });
+  try { const s = JSON.parse(store.get(STAR_KEY) || '{}'), k = locKey(); if (k && n > (s[k] || 0)) { s[k] = n; store.set(STAR_KEY, JSON.stringify(s)); } } catch (e) {}
+  return { n, acc };
+}
+const starStr = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+// ---- the WANTED poster before each location ----
+function showWanted() {
+  const B = BOSSES[locKey()]; if (!B) return;
+  const cut = VARIANTS[B.kind].cut, c = CUT[cut];
+  $('wImg').src = c && c.full ? c.full : '';
+  $('wName').textContent = B.name;
+  $('wReward').textContent = '$' + B.reward.toLocaleString('ru-RU');
+  $('wLoc').textContent = LOCS[loc].name + '. ' + LOCS[loc].sub + '. Сначала его банда, потом он сам.';
+  $('wanted').hidden = false;
+}
+function hideWanted() { $('wanted').hidden = true; }
+
+// ---- noon duel ----
+function duelSlot() {
+  const c = LOCS[loc].center.x;
+  return slots.filter(s => s.loc === loc && s.type === 'door').sort((a, b) => Math.abs(a.pos.x - c) - Math.abs(b.pos.x - c))[0];
+}
+function duelNext(delay = 0.5) { clearEnemies(); duel.phase = 'intro'; duel.t = 0; duel.delay = delay; ammo = 6; reloading = 0; combo = 1; updateHud(); }
+function duelUpdate(dt) {
+  duel.t += dt;
+  const e = duel.opp;
+  if (duel.phase === 'intro' && duel.t > duel.delay) {
+    // the opponent walks out into the middle of the street and turns to face you
+    duel.opp = spawnRunner({ d: 10.2, stop: rand(-0.12, 0.12), v: 3.2, margin: 0.3, kind: duel.round % 2 ? 'annie' : 'outlaw' });
+    if (!duel.opp) return;
+    duel.opp.duel = true; duel.opp.fuse = 1e9; duel.opp.stay = 1e9;
+    level = duel.round; updateHud();
+    duel.phase = 'enter'; showBanner('Раунд ' + duel.round, 'Руку к кобуре. Стреляй только после сигнала');
+  } else if (duel.phase === 'enter' && e && e.phase === 'up') {
+    duel.phase = 'wait'; duel.t = 0; duel.waitT = rand(1.8, 4.6); duel.ticks = 0; showBanner('Жди…', '');
+  } else if (duel.phase === 'wait') {
+    e.t = 0; e.aim = 0;
+    if (duel.t > duel.ticks * 0.7 + 0.4) { duel.ticks++; tick(700 + duel.ticks * 40, 0, 0.3); }
+    if (duel.t >= duel.waitT) {
+      duel.phase = 'draw'; duel.t = 0; duel.drawAt = performance.now();
+      e.t = 0; e.fuse = Math.max(0.3, 0.85 - 0.05 * (duel.round - 1));
+      showBanner('ОГОНЬ!', ''); bellSound();
+    }
+  } else if (duel.phase === 'draw' && duel.t > 0.7) hideBanner();
+  else if (duel.phase === 'after' && duel.t > 2.0) { hideBanner(); if (state === 'play') duelNext(0.2); }
+}
+function duelFoul() {
+  const e = duel.opp;
+  duel.phase = 'after'; duel.t = 0;
+  showBanner('Фальстарт!', 'Стрелять можно только после сигнала');
+  if (e && e.phase !== 'dead') { e.phase = 'run'; e.t = 0; e.run.stopped = true; e.aim = 0; }
+  hurt(false);
+}
+function duelWin(e) {
+  const ms = performance.now() - duel.drawAt;
+  duel.wins++; duel.best = duel.best ? Math.min(duel.best, ms) : ms;
+  const bonus = 200 + duel.round * 50 + Math.max(0, Math.round(800 - ms));
+  score += bonus;
+  showBanner('Победа!', 'Реакция ' + (ms / 1000).toFixed(2) + ' с · +$' + bonus);
+  duel.phase = 'after'; duel.t = 0; duel.round++;
+}
+
+// ---- enemy hooks called from the main loop ----
+// returns true when the enemy was fully handled here
+function preEnemy(e, dt) {
+  if (e.captor) {
+    const c = e.captor;
+    if (c.phase !== 'dead' && !c.gone && e.phase !== 'dead') { e.phase = c.phase; e.t = c.t; placeEnemy(e); return true; }
+    e.captor = null; if (e.phase === 'up') { e.phase = 'leave'; e.t = 0; }
+  }
+  if (e.phase === 'run') {
+    const R = e.run; e.t += dt; e.runMoving = true;
+    e.standPos.x += R.dir * R.v * dt;
+    if (!R.stopped && (e.standPos.x - R.stopX) * R.dir >= 0) { R.stopped = true; e.runMoving = false; e.phase = 'up'; e.t = 0; e.fuse = e.duel ? 1e9 : difficulty().fuse * 0.8; e.cocked = false; }
+    if ((e.standPos.x - R.x1) * R.dir >= 0) e.gone = true;
+    placeEnemy(e); return true;
+  }
+  return false;
+}
+function dynUp(e, dt) {
+  e.aim = 0;
+  if (e.dyn.held) {
+    sparkle(e.dyn.stick, dt);
+    if (!e.hissed && e.t > e.fuse * 0.35 && state === 'play') { e.hissed = true; hissSound(panOf(e.c.group.position), e.fuse * 0.7); }
+    if (e.t >= e.fuse && state === 'play') throwDynamite(e);
+  } else if (e.t > 0.3) { e.phase = 'leave'; e.t = 0; }
+}
+function afterShot(e) {
+  if (e.run) { e.phase = 'run'; e.t = 0; e.aim = 0; }
+  if (e.duel) { duel.phase = 'after'; duel.t = 0; showBanner('Он оказался быстрее', 'Минус жизнь'); }
+}
+function placeExtra(e) {
+  const g = e.c.group;
+  if (e.captor) { g.position.x -= 0.12; g.position.z += 0.34; }
+  if (e.hostage && e.hostage.captor === e) g.position.x += 0.15;
+  if (e.dyn && e.dyn.held && e.c.leftArm && !e.c.leftArm.gone) {
+    const w = e.phase === 'up' ? clamp((e.t - e.fuse * 0.45) / (e.fuse * 0.5), 0, 1) : 0;
+    e.c.leftArm.sh.rotation.x = -w * 2.4;
+  }
+  if (e.run) {
+    const face = Math.atan2(camera.position.x - g.position.x, camera.position.z - g.position.z);
+    if (e.phase === 'run') {
+      const w = time * (e.run.v * 2.6);
+      if (e.c.legs) e.c.legs.forEach((L, i) => { L.hip.rotation.x = Math.sin(w + i * Math.PI) * 0.75; L.knee.rotation.x = Math.max(0, Math.sin(w + i * Math.PI + 0.9)) * 1.2; });
+      g.position.y += Math.abs(Math.sin(w)) * 0.016 * e.run.v;
+      g.rotation.y = face + e.run.dir * (e.run.v > 3 ? 0.7 : 0.45);
+    } else if (e.phase !== 'dead') {
+      g.rotation.y = face;
+      if (e.c.legs) e.c.legs.forEach(L => { L.hip.rotation.x *= 0.8; L.knee.rotation.x *= 0.8; });
+    }
+  }
+}
+function pickKind(slot) {
+  const r = Math.random();
+  if (level >= 2 && r < 0.14) return 'dynamiter';
+  if (level >= 3 && r < 0.25 && (slot.type === 'door' || slot.type === 'cover')) return 'hostage';
+  return pickOutlaw();
+}
+// spawning and location flow for the arcade mode
+function arcadeTick(dt) {
+  if (locPhase === 'boss' && boss && !boss.e) { bossRespawnT -= dt; if (bossRespawnT <= 0) spawnBoss(); }
+  if (level >= 2 && locPhase !== 'clear') { runnerT -= dt; if (runnerT <= 0) { spawnRunner(); runnerT = rand(9, 15); } }
+  const busy = enemies.some(e => e.phase === 'up' || e.phase === 'rise' || e.phase === 'run');
+  if (locPhase === 'minions' && locKills >= LOCS[loc].quota && !busy) startBoss();
+  else if (locPhase === 'clear' && !busy && !DYNS.length) startTravel();
+}
+
+// ---- run summary ----
+const plural = (n, one, few, many) => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 10 || b >= 20) ? few : many; };
+function fillSummary() {
+  const acc = shots ? Math.round(hits / shots * 100) : 0, notes = [];
+  const set = (id, label, val) => { $(id + 'L').textContent = label; $(id).textContent = val; };
+  if (mode === 'duel') {
+    set('statKills', 'Побед', duel.wins);
+    set('statAcc', 'Реакция', duel.best ? (duel.best / 1000).toFixed(2) + ' с' : '—');
+    set('statHeads', 'Раунд', duel.round);
+    set('statCombo', 'Точность', acc + '%');
+    $('stats2').hidden = false; $('statBossesB').hidden = true;
+  } else {
+    set('statKills', 'Бандитов', kills);
+    set('statAcc', 'Точность', acc + '%');
+    set('statHeads', 'В голову', ST.heads);
+    set('statCombo', 'Лучшая серия', '×' + ST.bestCombo);
+    set('statBosses', 'Главарей', ST.bosses);
+    $('stats2').hidden = false; $('statBossesB').hidden = false;
+  }
+  const who = { sheriff: 'шерифа', lady: 'миссис Хопкинс', barkeep: 'бармена' };
+  for (const [k, n] of Object.entries(ST.innocents)) notes.push(`Застрелил ${who[k] || 'невиновного'} ${n} ${plural(n, 'раз', 'раза', 'раз')}`);
+  if (ST.saved) notes.push(`Спас ${ST.saved} ${plural(ST.saved, 'заложника', 'заложников', 'заложников')}`);
+  if (ST.dynAir) notes.push(`Сбил динамит в воздухе: ${ST.dynAir}`);
+  if (ST.kegs) notes.push(`Взорвал ${ST.kegs} ${plural(ST.kegs, 'бочку', 'бочки', 'бочек')} с порохом`);
+  if (ST.burned) notes.push(`Поджёг ${ST.burned} ${plural(ST.burned, 'бандита', 'бандитов', 'бандитов')} горящим маслом`);
+  if (ST.lamps || ST.bottles) notes.push(`Разбил фонарей: ${ST.lamps}, бутылок: ${ST.bottles}`);
+  if (ST.perfect) notes.push(`Идеальных перезарядок: ${ST.perfect}`);
+  ST.stars.forEach(s => notes.push(`${s.name}: ${starStr(s.n)}`));
+  $('notes').innerHTML = notes.map(n => `<li>${n}</li>`).join('');
+  $('notes').hidden = !notes.length;
+}
+function resetRun(m) {
+  mode = m; ST = newStats(); lap = 0; slowT = 0; btUsed = false; runnerT = 10; reloadTotal = RELOAD;
+  document.body.classList.remove('slowmo');
+  duel.round = 1; duel.phase = 'off'; duel.wins = 0; duel.best = 0; duel.opp = null;
+  hideWanted(); resetLocState();
+}
+
+// ---- online leaderboard (Netlify function + blob store); hidden when offline or opened as a file ----
+const BOARD_URL = '/.netlify/functions/scores';
+let boardSent = false;
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function boardRender(list, meIdx = -1) {
+  $('boardList').innerHTML = list.slice(0, 10).map((r, i) => `<li class="${i === meIdx ? 'me' : ''}">${esc(r.n)} — $${Number(r.s).toLocaleString('ru-RU')}</li>`).join('');
+}
+async function boardShow() {
+  const b = $('board');
+  if (!location.protocol.startsWith('http')) { b.hidden = true; return; }
+  boardSent = false; b.hidden = false;
+  $('boardName').value = store.get('saloon3d-name') || '';
+  $('boardSend').disabled = score <= 0; $('boardName').disabled = false;
+  $('boardNote').textContent = (mode === 'duel' ? 'Таблица дуэлей' : 'Таблица охотников за головами') + ' · загружаю…';
+  $('boardList').innerHTML = '';
+  try {
+    const r = await fetch(BOARD_URL + '?mode=' + mode); if (!r.ok) throw 0;
+    const j = await r.json(); boardRender(j.list || []);
+    $('boardNote').textContent = mode === 'duel' ? 'Таблица дуэлей' : 'Таблица охотников за головами';
+  } catch (e) { b.hidden = true; }
+}
+$('boardForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const name = $('boardName').value.trim().slice(0, 16);
+  if (!name || boardSent || score <= 0) return;
+  boardSent = true; store.set('saloon3d-name', name);
+  $('boardSend').disabled = true; $('boardName').disabled = true; $('boardNote').textContent = 'Отправляю…';
+  try {
+    const r = await fetch(BOARD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, name, score }) });
+    if (!r.ok) throw 0;
+    const j = await r.json(); boardRender(j.list || [], j.rank ?? -1);
+    $('boardNote').textContent = j.rank >= 0 && j.rank < 10 ? `Ты на ${j.rank + 1}-м месте!` : 'Записано. До десятки пока не дотянул.';
+  } catch (e) { boardSent = false; $('boardSend').disabled = false; $('boardName').disabled = false; $('boardNote').textContent = 'Не получилось отправить, попробуй ещё раз.'; }
+});
+
 // menu dressing
 setLoc(PLAYLIST[0]);
 { const d = spawn(slots.find(s => s.loc === loc && s.type === 'door'), 'annie'); if (d) { d.phase = 'up'; d.aim = 0.2; } }
@@ -3729,7 +4362,7 @@ setLoc(PLAYLIST[0]);
   $('qnote').textContent = qPref === 'auto' ? `Сейчас: ${Q.label.toLowerCase()}. Если тормозит, выберите «Низкая».` : '';
 }
 updateHud();
-$('startBtn').disabled = false;
+$('startBtn').disabled = false; $('duelBtn').disabled = false;
 $('loading').hidden = true;
 $('startBtn').focus();
 
@@ -3760,7 +4393,9 @@ renderer.setAnimationLoop(now => {
       menuTime = -1e9;
     }
   }
-  update(dt);
+  const ts = slowT > 0 ? 0.35 : 1;
+  if (slowT > 0) { slowT -= dt; if (slowT <= 0) document.body.classList.remove('slowmo'); }
+  update(dt * ts, dt);
   renderer.info.reset();
   renderer.render(scene, camera);
 });
