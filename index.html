@@ -79,6 +79,14 @@
     box-shadow: 0 3px 0 var(--ink);
     display: none;
   }
+  .music-btn {
+    position: fixed; right: 16px; top: calc(env(safe-area-inset-top, 0px) + 78px);
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 2px solid rgba(234,215,176,.6); background: rgba(30,19,12,.55); color: var(--paper);
+    font-size: 19px; line-height: 1; cursor: pointer; z-index: 5;
+  }
+  .music-btn.off { opacity: .45; text-decoration: line-through; }
+  .music-btn:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   .rotate-tip {
     position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
     display: none; text-align: center;
@@ -215,6 +223,7 @@
   <span class="hint" id="hint">R / пробел / ПКМ — перезарядка</span>
 </div>
 <button class="reload-btn" id="reloadBtn" type="button">Перезарядка</button>
+<button class="music-btn" id="musicBtn" type="button" aria-label="Музыка" title="Музыка (M)">♪</button>
 <div class="rotate-tip">Поверни телефон горизонтально, так улица будет крупнее</div>
 
 <div class="overlay" id="startScreen">
@@ -226,6 +235,7 @@
     <ul class="rules">
       <li><b>Клик</b><span>выстрел, в барабане 6 патронов</span></li>
       <li><b>R, пробел, ПКМ</b><span>перезарядка</span></li>
+      <li><b>M или ♪</b><span>музыка вкл/выкл</span></li>
       <li><b>В голову</b><span>больше денег, серия умножает до ×5</span></li>
       <li><b>Бандит</b><span>в красном платке, $100 / $250 в голову</span></li>
       <li><b>Меткая Энни</b><span>стреляет быстрее, $150 / $350</span></li>
@@ -2191,6 +2201,37 @@ function glassSound(pan = 0) {
 }
 function cockSound(pan) { tick(1300, 0, 0.12, pan); tick(2100, 0.07, 0.1, pan); }
 
+// ================= music: Suno track, two players crossfading so the loop never stops =================
+const MUSIC_VOL = 0.4, XFADE = 4;
+const music = { players: [new Audio('assets/music/saloon-showdown.mp3'), new Audio('assets/music/saloon-showdown.mp3')], cur: 0, started: false, muted: false, fadeT: 0 };
+music.players.forEach(a => { a.preload = 'auto'; a.volume = 0; });
+try { music.muted = localStorage.getItem('saloon3d-music') === 'off'; } catch (e) {}
+function musicStart() {
+  if (music.started || music.muted) return;
+  music.started = true; music.cur = 0;
+  const a = music.players[0]; a.currentTime = 0; a.volume = MUSIC_VOL; a.play().catch(() => { music.started = false; });
+}
+function musicTick(dt) {
+  if (!music.started) return;
+  const a = music.players[music.cur], b = music.players[1 - music.cur];
+  if (a.duration && a.currentTime > a.duration - XFADE && b.paused) { b.currentTime = 0; b.volume = 0; b.play().catch(() => {}); music.fadeT = 0; }
+  if (!b.paused) {
+    music.fadeT += dt; const k = Math.min(1, music.fadeT / XFADE);
+    a.volume = MUSIC_VOL * (1 - k); b.volume = MUSIC_VOL * k;
+    if (k >= 1) { a.pause(); music.cur = 1 - music.cur; }
+  }
+}
+function musicToggle() {
+  music.muted = !music.muted;
+  try { localStorage.setItem('saloon3d-music', music.muted ? 'off' : 'on'); } catch (e) {}
+  $('musicBtn').classList.toggle('off', music.muted);
+  if (music.muted) { music.players.forEach(a => a.pause()); music.started = false; }
+  else musicStart();
+}
+$('musicBtn').classList.toggle('off', music.muted);
+$('musicBtn').addEventListener('click', e => { e.stopPropagation(); musicToggle(); });
+addEventListener('keydown', e => { if (e.code === 'KeyM') musicToggle(); });
+
 // ================= game state =================
 const RELOAD = 0.45;
 let state = 'menu';
@@ -2436,6 +2477,7 @@ function startTravel() {
 }
 function startGame() {
   initAudio();
+  musicStart();
   clearEnemies();
   holes.forEach(h => scene.remove(h)); holes.length = 0;
   clearGore();
@@ -2533,6 +2575,7 @@ function update(dt) {
   hurtFx = Math.max(0, hurtFx - dt * 1.6);
   kick = Math.max(0, kick - dt * 7);
   hurtEl.style.opacity = hurtFx.toFixed(3);
+  musicTick(dt);
   skyMat.uniforms.time.value = time;
 
   const menu = state === 'menu';
