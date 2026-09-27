@@ -2259,12 +2259,14 @@ function spawn(forceSlot, forceKind) {
     fuse: difficulty().fuse * (V.fuse || 1) * rand(0.92, 1.12), stay: rand(1.6, 2.1), meshes: [],
   };
   c.group.traverse(o => { if (o.userData.hitbox) { o.userData.enemy = e; e.meshes.push(o); } });
+  if (painted && slot.type !== 'door') e.pivotH = slot.edge;
   if (slot.coverTop !== undefined) {
     // crouched behind the cover: the head starts just under its top edge and the figure stands up from there
     const figH = 2.3 * Math.abs(c.group.scale.y);
     // once up, show at least head and chest above the cover (stepping onto a crate or leaning out)
     e.lift = Math.max(0, slot.coverTop + 0.48 * figH - figH - slot.pos.y);
     e.hide = new T.Vector3(0, -Math.max(0.6, figH + 0.12 - (slot.coverTop - slot.pos.y) + e.lift), 0);
+    e.pivotH = Math.max(0.2, slot.coverTop - slot.pos.y - e.lift - 0.05);
   }
   if (painted && state === 'play' && (slot.type === 'cover' || slot.type === 'roof')) {
     // a little dust where the figure pops up
@@ -2651,9 +2653,9 @@ function update(dt) {
       e.aim = Math.max(0, e.aim - dt * 4);
       if (LOCS[loc].painted && e.slot.type !== 'door') {
         // behind a sill, crest or cover: slump down out of sight instead of tipping over (no legs popping up)
-        const k = clamp((e.t - 0.15) / 0.9, 0, 1);
-        e.fall = clamp(e.t / 0.3, 0, 1) * 0.3;
-        e.sink = k * k * (2.3 * Math.abs(e.c.group.scale.y) + (e.lift || 0));
+        // tips over backwards, away from the camera (legs stay behind the edge), then drops out of view
+        e.fall = ease(clamp(e.t / 0.5, 0, 1)) * 1.2;
+        e.sink = Math.max(0, e.t - 0.35) ** 2 * 5;
       } else {
         e.fall = Math.pow(clamp(e.t / 0.45, 0, 1), 2) * 1.45;
         e.sink = LOCS[loc].painted ? 0 : Math.max(0, e.t - 2.2) * Math.max(0, e.t - 2.2) * 6;
@@ -2688,7 +2690,7 @@ const PAINTED = [
       { type: 'door', u: 930, d: 16.6, row: 622, dy: 0, hide: [1.7, 0, 0] },
       { type: 'door', u: 1395, d: 16.6, row: 622, dy: 0, hide: [1.7, 0, 0] },
       { type: 'roof', u: 470, d: 16.7, row: 100, dy: -0.68, hide: [0, -2.7, 0] },
-      { type: 'roof', u: 1060, d: 16.7, row: 172, dy: -0.68, hide: [0, -2.7, 0] },
+      { type: 'roof', u: 925, d: 16.7, row: 150, dy: -0.68, hide: [0, -2.7, 0] },
       { type: 'roof', u: 1385, d: 16.7, row: 97, dy: -0.82, hide: [0, -2.7, 0] },
       { type: 'cover', u: 175, d: 10.9, y: 0, top: 612, hide: [0, -2.9, 0] },
       { type: 'cover', u: 527, d: 12.3, y: 0, top: 590, hide: [0, -2.9, 0] },
@@ -2772,7 +2774,7 @@ const PLAYLIST = [];
     for (const s of P.slots) {
       const y = s.y !== undefined ? s.y : P.h - (s.row - PCY) * s.d / PF + s.dy;
       slots.push({ type: s.type, loc: li, scale: s.scale, pos: new T.Vector3(P.x + (s.u - PCX) * s.d / PF, y, -s.d), hide: new T.Vector3(...s.hide),
-        coverTop: s.top !== undefined ? P.h - (s.top - PCY) * s.d / PF : undefined });
+        coverTop: s.top !== undefined ? P.h - (s.top - PCY) * s.d / PF : undefined, edge: s.dy !== undefined ? -s.dy : undefined });
     }
   }
 }
