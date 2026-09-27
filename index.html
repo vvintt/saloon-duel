@@ -144,7 +144,9 @@
     cursor: default;
   }
   .poster {
-    width: min(440px, 100%);
+    box-sizing: border-box;
+    width: min(502px, 100%);
+    min-width: 0; min-height: 0;
     max-height: calc(100% - 8px); overflow-y: auto;
     background:
       radial-gradient(circle at 20% 15%, rgba(255,255,255,.25), transparent 40%),
@@ -189,6 +191,10 @@
   .quality button.on { background: var(--ink); color: var(--paper); }
   .quality button:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
   .qnote { font-size: 13px; opacity: .7; min-height: 1em; }
+  @media (max-width: 520px) {
+    .poster { padding: 20px 16px; transform: none; }
+    .rules li { grid-template-columns: 100px minmax(0, 1fr); }
+  }
   @media (prefers-reduced-motion: reduce) { .poster { transform: none; } .float { animation-duration: .6s; } }
 </style>
 </head>
@@ -238,7 +244,7 @@
       <li><b>M или ♪</b><span>музыка вкл/выкл</span></li>
       <li><b>В голову</b><span>больше денег, серия умножает до ×5</span></li>
       <li><b>Бандит</b><span>в красном платке, $100 / $250 в голову</span></li>
-      <li><b>Меткая Энни</b><span>стреляет быстрее, $150 / $350</span></li>
+      <li><b>Бородач Хэнк</b><span>стреляет быстрее, $150 / $350</span></li>
       <li><b>Бутылки</b><span>на коновязях, +$50 за каждую</span></li>
       <li><b>Шериф</b><span>с поднятыми руками — свой. Попадёшь — минус жизнь</span></li>
     </ul>
@@ -1368,7 +1374,7 @@ const VARIANTS = {
   lady:       { scale: 1.18 },
   barkeep:    { scale: 1.2 },
   outlaw:     { pts: [100, 250], fuse: 1.0, hp: 1, scale: 1.14, label: '', cut: 'bandit' },
-  annie:      { pts: [150, 350], fuse: 0.8, hp: 1, scale: 1.1, label: 'Меткая Энни: ', cut: 'cowgirl' },
+  annie:      { pts: [150, 350], fuse: 0.8, hp: 1, scale: 1.14, label: 'Бородач Хэнк: ', cut: 'gunman' },
   sheriff:    { scale: 1.12, cut: 'sheriff' },
 };
 const INNOCENT = new Set(['lady', 'barkeep', 'sheriff']);
@@ -1616,7 +1622,7 @@ function inPoly(x, y, poly) {
     g.font = '14px "Kelly Slab", Georgia, serif'; g.fillText('REWARD · SHERIFF’S OFFICE', 128, 324);
     return toTex(c);
   };
-  const posterMats = [posterTex('bandit', '$500'), posterTex('cowgirl', '$800'), posterTex('bandit', '$300')].map(t => new T.MeshStandardMaterial({ map: t, roughness: 0.95, side: T.DoubleSide }));
+  const posterMats = [posterTex('bandit', '$500'), posterTex('gunman', '$800'), posterTex('bandit', '$300')].map(t => new T.MeshStandardMaterial({ map: t, roughness: 0.95, side: T.DoubleSide }));
   const poster = (x, y, z, ry, i) => { const m = add(scene, G('posterPlane', () => new T.PlaneGeometry(0.62, 0.87)), posterMats[i % posterMats.length], x, y, z, false, true); m.rotation.set(0, ry, rand(-0.06, 0.06)); return m; };
   // street facades (between door and window)
   [[-7.4 - 1.45, 1.55], [-7.4 + 1.45, 1.6], [0 - 1.5, 1.7], [7.4 + 1.5, 1.6]].forEach(([x, y], i) => poster(x, y, 0.2, 0, i));
@@ -2275,7 +2281,7 @@ function musicToggle() {
 }
 $('musicBtn').classList.toggle('off', music.muted);
 $('musicBtn').addEventListener('click', e => { e.stopPropagation(); musicToggle(); });
-addEventListener('keydown', e => { if (e.code === 'KeyM') musicToggle(); });
+addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat) musicToggle(); });
 
 // ================= game state =================
 const RELOAD = 0.45;
@@ -2408,14 +2414,14 @@ function shoot() {
   ray.setFromCamera(pointer, camera);
   const targets = staticHits.concat(...enemies.filter(e => e.phase !== 'dead').map(e => e.meshes));
   let hit = firstSolid(ray.intersectObjects(targets, false));
-  if (!hit || !hit.object.userData.enemy) hit = assist(targets) || hit;
-  {
-    ray.setFromCamera(pointer, camera);
-    const lh = firstSolid(ray.intersectObjects(LEAF_MESHES, false));
-    if (lh && (!hit || lh.distance < hit.distance + 0.4) && !(hit && hit.object.userData.enemy)) {
-      lh.object.userData.leaf.vel += 3.5;
-      spawnSprite(puffTex, lh.point, { size: 0.25, life: 0.6, grow: 1.5, color: 0xc9a882, opacity: 0.7 });
-    }
+  const leafHit = firstSolid(ray.intersectObjects(LEAF_MESHES, false));
+  const aimedAtLeaf = leafHit && (!hit || leafHit.distance < hit.distance + 0.4);
+  // Keep deliberate shots at characters and interactive scenery; assist only a miss.
+  const directTarget = hit && (hit.object.userData.enemy || hit.object.userData.bottle || hit.object.userData.glass);
+  if (!directTarget && !aimedAtLeaf) hit = assist(targets) || hit;
+  if (aimedAtLeaf && !(hit && hit.object.userData.enemy)) {
+    leafHit.object.userData.leaf.vel += 3.5;
+    spawnSprite(puffTex, leafHit.point, { size: 0.25, life: 0.6, grow: 1.5, color: 0xc9a882, opacity: 0.7 });
   }
   if (!hit) { combo = 1; updateHud(); return; }
   const pan = panOf(hit.point);
@@ -2482,7 +2488,7 @@ const firstSolid = hits => hits.find(solidAt);
 // and take the closest one that reaches an enemy with nothing in between.
 const _nd = new T.Vector2();
 function assist(targets) {
-  if (!enemies.some(e => e.phase !== 'dead')) return null;
+  if (!enemies.some(e => e.phase !== 'dead' && !INNOCENT.has(e.kind))) return null;
   const sx = 2 / innerWidth, sy = 2 / innerHeight;
   for (const r of [10, 18, 27, 36]) {
     for (let k = 0; k < 12; k++) {
@@ -2490,7 +2496,7 @@ function assist(targets) {
       _nd.set(pointer.x + Math.cos(a) * r * sx, pointer.y + Math.sin(a) * r * sy);
       ray.setFromCamera(_nd, camera);
       const h = firstSolid(ray.intersectObjects(targets, false));
-      if (h && h.object.userData.enemy) return h;
+      if (h && h.object.userData.enemy && !INNOCENT.has(h.object.userData.enemy.kind)) return h;
     }
   }
   return null;
@@ -2569,8 +2575,13 @@ stage.addEventListener('pointerdown', e => { setPointer(e); if (e.button === 2) 
 stage.addEventListener('pointermove', setPointer);
 stage.addEventListener('pointerleave', () => { pointerInside = false; });
 stage.addEventListener('pointerenter', () => { pointerInside = true; });
-addEventListener('keydown', e => { if (e.code === 'KeyR' || e.code === 'Space') { e.preventDefault(); reload(); } });
-$('reloadBtn').addEventListener('pointerdown', e => { e.preventDefault(); reload(); });
+addEventListener('keydown', e => {
+  if (state !== 'play' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.code !== 'KeyR' && e.code !== 'Space') return;
+  if (e.code === 'Space' && e.target instanceof Element && e.target.closest('button')) return;
+  e.preventDefault(); reload();
+});
+$('reloadBtn').addEventListener('click', reload);
 $('startBtn').addEventListener('click', startGame);
 $('againBtn').addEventListener('click', startGame);
 
