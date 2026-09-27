@@ -2165,11 +2165,20 @@ function loadSfx() {
     ac.decodeAudioData(u8.buffer).then(buf => { SFXB[k] = buf; }).catch(() => {});
   });
 }
+// All 7 recorded shots take turns: shuffle, play through the whole bag, reshuffle (never the same shot twice in a row).
+let rifleBag = [], lastRifle = '';
+function nextRifle() {
+  if (!rifleBag.length) {
+    rifleBag = [1, 2, 3, 4, 5, 6, 7].map(i => 'rifle' + i).sort(() => Math.random() - 0.5);
+    if (rifleBag[0] === lastRifle) rifleBag.push(rifleBag.shift());
+  }
+  return (lastRifle = rifleBag.shift());
+}
 function playSample(names, vol = 1, pan = 0, rate = 1, lowpass = 0) {
   const avail = names.filter(n => SFXB[n]);
   if (!ac || !avail.length) return false;
   const src = ac.createBufferSource(); src.buffer = SFXB[pick(avail)];
-  src.playbackRate.value = rate * rand(0.96, 1.04);
+  src.playbackRate.value = rate * rand(0.98, 1.02);
   const g = ac.createGain(); g.gain.value = vol;
   let node = src;
   if (lowpass) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; node.connect(f); node = f; }
@@ -2179,7 +2188,7 @@ function playSample(names, vol = 1, pan = 0, rate = 1, lowpass = 0) {
 function gunSound(vol = 1, cutoff = 2800, pan = 0) {
   if (!ac) return;
   const mine = cutoff >= 2800;
-  if (mine && playSample(['pistol'], 1.0 * vol, pan)) return; // the recording carries its own body and tail
+  if (mine && playSample([nextRifle()], 0.95 * vol, pan)) return; // each shot is the next recording from a shuffled bag
   if (!mine && playSample(['enemy1', 'enemy2', 'enemy3'], 0.7 * vol, pan, 0.94, 5200)) {
     // body and street echo under the recorded crack
     const t = ac.currentTime, dst = out(pan);
