@@ -2393,7 +2393,10 @@ function spawn(forceSlot, forceKind) {
   if (painted && slot.type === 'door') {
     const deep = slot.pos.z < -17; // the mine tunnel is long and lit: walk out from far inside
     e.hide = new T.Vector3(0, 0, deep ? -6 : -2.3); e.riseT = deep ? 1.6 : 0.95;
-    // own material copies so the figure can step out of the dark room gradually instead of popping in lit
+    e.doorFade = true;
+  }
+  if (painted) {
+    // own material copies so every figure fades in (and out) instead of popping
     const cache = new Map(); e.mats = [];
     e.meshes.forEach(m => {
       if (!cache.has(m.material)) {
@@ -2431,8 +2434,10 @@ function placeEnemy(e) {
   g.position.copy(e.slot.pos).addScaledVector(e.hide || e.slot.hide, 1 - p);
   if (e.lift) g.position.y += e.lift;
   if (e.mats) {
-    const lit = e.phase === 'rise' || e.phase === 'leave' ? 0.08 + 0.92 * p * p : 1;
-    const op = e.phase === 'rise' || e.phase === 'leave' ? clamp(p / 0.35, 0, 1) : 1;
+    const moving = e.phase === 'rise' || e.phase === 'leave';
+    // doors: dark and invisible while still inside, fully shown only once through the doorway (no clipped heads)
+    const lit = moving && e.doorFade ? 0.1 + 0.9 * clamp((p - 0.55) / 0.45, 0, 1) : 1;
+    const op = !moving ? 1 : e.doorFade ? clamp((p - 0.62) / 0.3, 0, 1) : clamp(p / 0.3, 0, 1);
     e.mats.forEach(m => { m.color.copy(m.userData.base.color).multiplyScalar(lit); m.emissiveIntensity = m.userData.base.ei * lit; m.opacity = op; m.depthWrite = op > 0.98; });
   }
   const walking = e.riseT && p > 0 && p < 1 && e.phase !== 'dead';
