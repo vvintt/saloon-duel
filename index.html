@@ -2726,8 +2726,9 @@ const PAINTED = [
     slots: [
       { type: 'door', u: 1137, d: 19.0, y: 0, hide: [1.7, 0, 0] },
       // on the rock hill above the mine portal: they rise from behind its crest
-      { type: 'cover', u: 1128, d: 18.9, y: 1.9, top: 332, hide: [0, -2.9, 0] },
-      { type: 'cover', u: 1225, d: 18.9, y: 1.9, top: 334, hide: [0, -2.9, 0] },
+      // kept clear of the tunnel opening (x 1062–1212), otherwise their legs show inside it
+      { type: 'cover', u: 1030, d: 18.9, y: 1.9, top: 322, hide: [0, -2.9, 0] },
+      { type: 'cover', u: 1262, d: 18.9, y: 1.9, top: 342, hide: [0, -2.9, 0] },
       // crouched behind the ore cart
       { type: 'cover', u: 1224, d: 15.9, y: 0, top: 516, hide: [0, -2.9, 0] },
       { type: 'cover', u: 695, d: 9.4, y: 0, top: 490, hide: [0, -2.9, 0] },
