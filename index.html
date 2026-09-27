@@ -457,7 +457,7 @@ try { await Promise.race([Promise.all([document.fonts.load('120px "Rye"'), docum
 
 // ================= quality presets =================
 const QUALITY = {
-  low:    { label: 'Низкая',  pr: 0.75, aa: false, shadow: 0,    dust: false, clouds: false, drops: 180 },
+  low:    { label: 'Низкая',  pr: 1.0, aa: false, shadow: 0,    dust: false, clouds: false, drops: 180 },
   medium: { label: 'Средняя', pr: 1.0,  aa: true,  shadow: 2048, dust: true,  clouds: true,  drops: 350 },
   high:   { label: 'Высокая', pr: 1.5, aa: true,  shadow: 4096, dust: true,  clouds: true,  drops: 550 },
 };
