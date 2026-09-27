@@ -2346,6 +2346,7 @@ function spawn(forceSlot, forceKind) {
   };
   c.group.traverse(o => { if (o.userData.hitbox) { o.userData.enemy = e; e.meshes.push(o); } });
   if (painted && slot.type !== 'door') e.pivotH = slot.edge;
+  if (painted && slot.type === 'door' && state === 'play') kickDoor(slot.loc, slot.pos.x, -2.5);
   if (slot.coverTop !== undefined) {
     // crouched behind the cover: the head starts just under its top edge and the figure stands up from there
     const figH = 2.3 * Math.abs(c.group.scale.y);
@@ -2408,6 +2409,14 @@ function shoot() {
   const targets = staticHits.concat(...enemies.filter(e => e.phase !== 'dead').map(e => e.meshes));
   let hit = firstSolid(ray.intersectObjects(targets, false));
   if (!hit || !hit.object.userData.enemy) hit = assist(targets) || hit;
+  {
+    ray.setFromCamera(pointer, camera);
+    const lh = firstSolid(ray.intersectObjects(LEAF_MESHES, false));
+    if (lh && (!hit || lh.distance < hit.distance + 0.4) && !(hit && hit.object.userData.enemy)) {
+      lh.object.userData.leaf.vel += 3.5;
+      spawnSprite(puffTex, lh.point, { size: 0.25, life: 0.6, grow: 1.5, color: 0xc9a882, opacity: 0.7 });
+    }
+  }
   if (!hit) { combo = 1; updateHud(); return; }
   const pan = panOf(hit.point);
   const o = hit.object;
@@ -2623,6 +2632,12 @@ function update(dt) {
   kick = Math.max(0, kick - dt * 7);
   hurtEl.style.opacity = hurtFx.toFixed(3);
   musicTick(dt);
+  for (const l of SWING_LEAVES) {
+    // damped spring back to closed; leaves can swing both ways like real saloon doors
+    l.vel += (-38 * l.ang - 2.6 * l.vel) * dt;
+    l.ang = clamp(l.ang + l.vel * dt, -1.35, 1.35);
+    l.pivot.rotation.y = l.sign * l.ang;
+  }
   skyMat.uniforms.time.value = time;
 
   const menu = state === 'menu';
@@ -2742,6 +2757,7 @@ function update(dt) {
     else if (e.phase === 'leave' && e.t >= RISE_T) e.gone = true;
     else if (e.phase === 'dead') {
       e.aim = Math.max(0, e.aim - dt * 4);
+      if (e.slot.type === 'door' && !e.doorHit && e.t > 0.2) { e.doorHit = true; kickDoor(loc, e.slot.pos.x, 7); }
       if (LOCS[loc].painted && e.slot.type !== 'door') {
         // behind a sill, crest or cover: slump down out of sight instead of tipping over (no legs popping up)
         // tips over backwards, away from the camera (legs stay behind the edge), then drops out of view
@@ -2776,6 +2792,12 @@ const rectP = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 const circP = (cx, cy, r, n = 28) => Array.from({ length: n }, (_, i) => [cx + Math.cos(i / n * 6.2832) * r, cy + Math.sin(i / n * 6.2832) * r]);
 const PAINTED = [
   { key: 'street', name: 'Главная улица', sub: 'Банда засела в окнах, дверях и на крышах', quota: 8, h: 3.38, x: 1000,
+    // batwing doors cut out of the painting so they can swing: opening, leaf rects [x0, x1, y0, y1], hinge side
+    swing: [
+      { hole: rectP(420, 450, 515, 622), leaves: [[424, 464, 500, 580, 'L'], [464, 506, 500, 580, 'R']] },
+      { hole: rectP(888, 452, 996, 620), leaves: [[898, 947, 499, 575, 'L'], [947, 996, 499, 575, 'R']] },
+      { hole: rectP(1350, 455, 1440, 622), leaves: [[1350, 1398, 500, 577, 'L'], [1398, 1446, 500, 577, 'R']] },
+    ],
     layers: [
       { d: 70, far: true },
       { d: 16, polys: [[[0, 30], [250, 78], [250, 125], [340, 125], [340, 100], [600, 100], [600, 125], [655, 125], [690, 160], [715, 170], [850, 170], [850, 148], [1000, 148], [1000, 170], [1140, 170], [1140, 200], [1160, 200], [1160, 145], [1300, 145], [1385, 95], [1470, 145], [1600, 145], [1600, 190], [1690, 190], [1690, 140], [1870, 60], [1870, 841], [0, 841]]],
@@ -2844,6 +2866,14 @@ const PAINTED = [
     ] },
 ];
 const PLAYLIST = [];
+const SWING_LEAVES = [], LEAF_MESHES = [], SWING_DOORS = [];
+// push both leaves of the batwing door nearest to world x (inward = away from the camera)
+function kickDoor(li, x, strength) {
+  const P = LOCS[li]; if (!P || !P.painted) return;
+  let best = null, bd = 1e9;
+  for (const sw of SWING_DOORS) { if (sw.loc !== li) continue; const wx = P.center.x + (sw.u - PCX) * 16.6 / PF, d = Math.abs(wx - x); if (d < bd) { bd = d; best = sw; } }
+  if (best && bd < 1.2) best.parts.forEach(l => { l.vel += strength * rand(0.8, 1.2); });
+}
 {
   const groundMat = new T.MeshBasicMaterial({ colorWrite: false });
   for (const P of PAINTED) {
@@ -2894,6 +2924,35 @@ const PLAYLIST = [];
     const gnd = new T.Mesh(new T.PlaneGeometry(220, 220), groundMat);
     gnd.rotation.x = -Math.PI / 2; gnd.position.set(P.x, 0, -60); gnd.renderOrder = -1; gnd.userData.dynamic = true;
     scene.add(gnd); staticHits.push(gnd);
+    for (const sw of P.swing || []) {
+      // interior behind the doorway: the painting with the leaves painted out
+      const DI = 19, DL = 16.85;
+      const [ic, ig] = cnv(PW, PH); ig.drawImage(img, 0, 0);
+      for (const [x0, x1, y0, y1] of sw.leaves) {
+        const gr = ig.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, '#1d130d'); gr.addColorStop(1, '#2c1d13');
+        ig.fillStyle = gr; ig.fillRect(x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4);
+      }
+      const itex = new T.CanvasTexture(ic); itex.colorSpace = T.SRGBColorSpace;
+      const [mc, mg] = cnv(PW / 2, PH / 2); mg.fillStyle = '#000'; mg.fillRect(0, 0, PW / 2, PH / 2); mg.fillStyle = '#fff';
+      mg.beginPath(); sw.hole.forEach(([x, y], i) => mg[i ? 'lineTo' : 'moveTo'](x / 2, y / 2)); mg.closePath(); mg.fill();
+      const inner = new T.Mesh(new T.PlaneGeometry(PW * DI / PF, PH * DI / PF), new T.MeshBasicMaterial({ map: itex, alphaMap: new T.CanvasTexture(mc), alphaTest: 0.5, toneMapped: false, fog: false }));
+      inner.position.set(P.x, P.h, -DI); inner.userData.dynamic = true; scene.add(inner);
+      sw.parts = [];
+      for (const [x0, x1, y0, y1, side] of sw.leaves) {
+        const [lc, lg] = cnv(PW, PH); lg.fillStyle = '#000'; lg.fillRect(0, 0, PW, PH); lg.fillStyle = '#fff'; lg.fillRect(x0, y0, x1 - x0, y1 - y0);
+        const hx = side === 'L' ? x0 : x1, px = P.x + (hx - PCX) * DL / PF;
+        const pivot = new T.Group(); pivot.position.set(px, 0, -DL); pivot.userData.dynamic = true; scene.add(pivot);
+        const leaf = new T.Mesh(new T.PlaneGeometry(PW * DL / PF, PH * DL / PF), new T.MeshBasicMaterial({ map: tex, alphaMap: new T.CanvasTexture(lc), alphaTest: 0.5, side: T.DoubleSide, toneMapped: false, fog: false }));
+        leaf.position.set(P.x - px, P.h, 0); pivot.add(leaf);
+        const a = new Uint8Array((PW >> 2) * (PH >> 2)); // coarse mask for bullet hits
+        for (let y = y0 >> 2; y < y1 >> 2; y++) for (let x = x0 >> 2; x < x1 >> 2; x++) a[y * (PW >> 2) + x] = 255;
+        leaf.userData.mask = { a, w: PW >> 2, h: PH >> 2 };
+        leaf.userData.leaf = { pivot, sign: side === 'L' ? 1 : -1, ang: 0, vel: 0 };
+        SWING_LEAVES.push(leaf.userData.leaf); LEAF_MESHES.push(leaf);
+        sw.parts.push(leaf.userData.leaf);
+      }
+      sw.u = (sw.hole[0][0] + sw.hole[1][0]) / 2; sw.loc = li; SWING_DOORS.push(sw);
+    }
     for (const s of P.slots) {
       const y = s.y !== undefined ? s.y : P.h - (s.row - PCY) * s.d / PF + s.dy;
       slots.push({ type: s.type, loc: li, scale: s.scale, pos: new T.Vector3(P.x + (s.u - PCX) * s.d / PF, y, -s.d), hide: new T.Vector3(...s.hide),
